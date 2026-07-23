@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+dist/
+build/
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Secrets
+*.pem
+*.key
+*.crt
+credentials.json
+service-account.json
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+
+# Ansible
+*.retry
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Go
+*.test
+*.prof
+
+# Flutter
+.metadata
+.dart_tool/
+.flutter-plugins*
+.packages
+
+# Database
+*.db
+*.sqlite
+
+# WireGuard runtime
+/etc/wireguard/*.conf
