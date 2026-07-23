@@ -1,0 +1,86 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	authv1 "github.com/veritasvpn/api/gen/auth/v1"
+	"github.com/veritasvpn/lib/config"
+	"github.com/veritasvpn/lib/logging"
+	jwtlib "github.com/veritasvpn/lib/jwt"
+	"github.com/veritasvpn/services/auth-svc/internal/handler"
+	"github.com/veritasvpn/services/auth-svc/internal/middleware"
+	"github.com/veritasvpn/services/auth-svc/internal/repository"
+	"github.com/veritasvpn/services/auth-svc/internal/service"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+)
+
+func main() {
+	cfg := config.Load()
+	log, err := logging.New(cfg.LogLevel)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer log.Sync()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	dbPool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal("failed to connect to database", zap.Error(err))
+	}
+	defer dbPool.Close()
+
+	if err := dbPool.Ping(ctx); err != nil {
+		log.Fatal("database ping failed", zap.Error(err))
+	}
+	log.Info("connected to PostgreSQL")
+
+	redisClient, err := repository.NewRedis(cfg.RedisURL)
+	if err != nil {
+		log.Fatal("failed to connect to Redis", zap.Error(err))
+	}
+	log.Info("connected to Redis")
+
+	db := repository.NewPostgres(dbPool)
+	jwtMgr := jwtlib.NewManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	svc := service.New(log, db, redisClient, jwtMgr)
+	authHandler := handler.NewAuthHandler(log, svc)
+	authInterceptor := middleware.NewAuthInterceptor(log, jwtMgr, redisClient)
+
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(authInterceptor.Unary()),
+	)
+	authv1.RegisterAuthServiceServer(grpcServer, authHandler)
+	reflection.Register(grpcServer)
+
+	lis, err := net.Listen("tcp", cfg.ServerAddr())
+	if err != nil {
+		log.Fatal("failed to listen", zap.Error(err))
+	}
+
+	go func() {
+		log.Info("auth-svc starting", zap.String("addr", cfg.ServerAddr()))
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatal("gRPC server failed", zap.Error(err))
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Info("shutting down auth-svc...")
+	grpcServer.GracefulStop()
+	log.Info("auth-svc stopped")
+}

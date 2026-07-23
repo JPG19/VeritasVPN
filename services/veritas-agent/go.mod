@@ -1,0 +1,31 @@
+module github.com/veritasvpn/services/veritas-agent
+
+go 1.22
+
+require (
+	github.com/prometheus/client_golang v1.20.5
+	github.com/veritasvpn/lib/config v0.0.0
+	github.com/veritasvpn/lib/logging v0.0.0
+	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20241231184526-a9ab2273dd10
+)
+
+require (
+	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/prometheus/client_model v0.6.1 // indirect
+	github.com/prometheus/common v0.55.0 // indirect
+	github.com/prometheus/procfs v0.15.1 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	go.uber.org/zap v1.27.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/net v0.33.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269a52ec99 // indirect
+	google.golang.org/protobuf v1.34.2 // indirect
+)
+
+replace github.com/veritasvpn/lib/config => ../../lib/config
+
+replace github.com/veritasvpn/lib/logging => ../../lib/logging

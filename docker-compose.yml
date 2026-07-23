@@ -1,0 +1,103 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: veritas
+      POSTGRES_USER: veritas
+      POSTGRES_PASSWORD: veritas_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./services/auth-svc/migrations:/docker-entrypoint-initdb.d/auth:ro
+      - ./services/wg-manager/migrations:/docker-entrypoint-initdb.d/wg:ro
+      - ./services/billing-svc/migrations:/docker-entrypoint-initdb.d/billing:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "veritas"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly no --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: -js -m 8222
+
+  auth-svc:
+    build:
+      context: .
+      dockerfile: services/auth-svc/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      NATS_URL: nats://nats:4222
+      JWT_SECRET: dev-secret-change-in-production-use-64-char-random-string
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  wg-manager:
+    build:
+      context: .
+      dockerfile: services/wg-manager/Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      NATS_URL: nats://nats:4222
+      AGENT_AUTH_TOKEN: dev-agent-token
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  billing-svc:
+    build:
+      context: .
+      dockerfile: services/billing-svc/Dockerfile
+    ports:
+      - "8083:8080"
+    environment:
+      DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
+      NATS_URL: nats://nats:4222
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_placeholder}
+      BTCPAY_SERVER_URL: ${BTCPAY_SERVER_URL:-http://btcpay:49392}
+      BTCPAY_API_KEY: ${BTCPAY_API_KEY:-}
+      LOG_LEVEL: debug
+      LOG_FORMAT: console
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+volumes:
+  pgdata:
