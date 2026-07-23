@@ -1,0 +1,89 @@
+# BTCPay Server — Bitcoin testnet deployment
+# Run: docker compose -f btcpay/docker-compose.yml up -d
+# Switch to mainnet: change NETWORK=mainnet, BTC_PORT=8332, BTC_P2P=8333
+
+services:
+  postgres-btcpay:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: btcpay
+      POSTGRES_PASSWORD: ${BTCPAY_POSTGRES_PASSWORD:-btcpay_secret_change_me}
+      POSTGRES_DB: btcpay
+    volumes:
+      - btcpay_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "btcpay"]
+      interval: 5s
+      retries: 5
+    restart: unless-stopped
+
+  bitcoind:
+    image: btcpayserver/bitcoin:28.1
+    environment:
+      BITCOIN_NETWORK: ${BTC_NETWORK:-testnet}
+      BITCOIN_EXTRA_ARGS: |
+        prune=10000
+        rpcuser=btcpay_rpc
+        rpcpassword=${BTC_RPC_PASSWORD:-rpc_password_change_me}
+        rpcallowip=0.0.0.0/0
+        rpcbind=0.0.0.0
+        txindex=0
+        server=1
+    volumes:
+      - btcpay_bitcoind:/home/bitcoin/.bitcoin
+    expose:
+      - "${BTC_RPC_PORT:-18332}"
+      - "${BTC_P2P_PORT:-18333}"
+    ports:
+      - "${BTC_P2P_PORT:-18333}:${BTC_P2P_PORT:-18333}"
+    restart: unless-stopped
+
+  nbxplorer:
+    image: nicolasdorier/nbxplorer:2.6.9
+    environment:
+      NBXPLORER_NETWORK: ${BTC_NETWORK:-testnet}
+      NBXPLORER_BTCRPCURL: http://bitcoind:${BTC_RPC_PORT:-18332}/
+      NBXPLORER_BTCRPCUSER: btcpay_rpc
+      NBXPLORER_BTCRPCPASSWORD: ${BTC_RPC_PASSWORD:-rpc_password_change_me}
+      NBXPLORER_BTCNODEENDPOINT: bitcoind:${BTC_P2P_PORT:-18333}
+      NBXPLORER_CHAINS: btc
+      NBXPLORER_BIND: 0.0.0.0:32838
+      NBXPLORER_NOAUTH: "true"
+      NBXPLORER_POSTGRES: User ID=btcpay;Password=${BTCPAY_POSTGRES_PASSWORD:-btcpay_secret_change_me};Host=postgres-btcpay;Port=5432;Database=nbxplorer
+      NBXPLORER_AUTOMIGRATE: "true"
+    volumes:
+      - btcpay_nbxplorer:/home/nbxplorer/.nbxplorer
+    expose:
+      - "32838"
+    depends_on:
+      postgres-btcpay:
+        condition: service_healthy
+      bitcoind:
+        condition: service_started
+    restart: unless-stopped
+
+  btcpayserver:
+    image: btcpayserver/btcpayserver:2.1.3
+    environment:
+      BTCPAY_NETWORK: ${BTC_NETWORK:-testnet}
+      BTCPAY_POSTGRES: User ID=btcpay;Password=${BTCPAY_POSTGRES_PASSWORD:-btcpay_secret_change_me};Host=postgres-btcpay;Port=5432;Database=btcpay
+      BTCPAY_BTCEXPLORERURL: http://nbxplorer:32838
+      BTCPAY_CHAINS: btc
+      BTCPAY_BIND: 0.0.0.0:49392
+      BTCPAY_EXTERNALURL: ${BTCPAY_EXTERNAL_URL:-http://localhost:49392}
+      BTCPAY_CHECKREVOCATIONLIST: "false"
+    ports:
+      - "49392:49392"
+    depends_on:
+      postgres-btcpay:
+        condition: service_healthy
+      nbxplorer:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  btcpay_pgdata:
+  btcpay_bitcoind:
+  btcpay_nbxplorer:
