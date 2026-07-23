@@ -86,6 +86,14 @@ veritas disconnect              # Disconnect
 | Mobile | Flutter (planned) |
 | Monitoring | Prometheus + Grafana |
 
+## Website
+
+The marketing/landing page lives in `website/`. Open `website/index.html` in a browser or serve it:
+
+```bash
+cd website && python3 -m http.server 8000
+```
+
 ## License
 
 Source available. Proprietary components are BSL licensed.
