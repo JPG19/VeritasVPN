@@ -1,7 +1,13 @@
+import { initAuthUI } from './auth.js';
+import { initBillingUI } from './billing.js';
+
 document.addEventListener('DOMContentLoaded', () => {
     const navbar = document.getElementById('navbar');
     const mobileToggle = document.getElementById('mobileToggle');
     const navLinks = document.querySelector('.nav-links');
+
+    initAuthUI();
+    initBillingUI();
 
     window.addEventListener('scroll', () => {
         if (window.scrollY > 10) {

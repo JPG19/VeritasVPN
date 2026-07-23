@@ -1439,14 +1439,18 @@ volumes:
 
 ### 9.3 Pricing Strategy
 
+> **Current shipping offer** (see `docs/BITCOIN_PAYMENTS_IMPLEMENTATION_PLAN.md`): Free + Premium ($5/mo), **Bitcoin only**. Annual/bi-annual and Monero discount below are deferred.
+
 | Tier | Price | Features |
 |------|-------|----------|
 | Free | $0 | 2 GB/mo, 5 server locations, 1 device |
-| Monthly | $5/mo | Unlimited data, all servers, 5 devices |
-| Annual | $50/yr ($4.17/mo) | Same as monthly, 17% discount |
-| Bi-annual | $90/2yr ($3.75/mo) | Same as monthly, 25% discount |
+| Premium (current) | $5/mo | Unlimited data, all servers, 5 devices — pay with Bitcoin |
+| Monthly (legacy name) | $5/mo | Same as Premium |
+| Annual | $50/yr ($4.17/mo) | Deferred |
+| Bi-annual | $90/2yr ($3.75/mo) | Deferred |
 
-**Crypto payments**: Monero gets 10% discount (privacy alignment).
+**Crypto payments (current):** Bitcoin via BTCPay Server only.  
+**Crypto payments (later):** Monero / Lightning discounts may return after Bitcoin checkout is live.
 
 ### 9.4 Break-Even Analysis
 

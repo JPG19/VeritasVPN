@@ -1,0 +1,364 @@
+import {
+  auth,
+  onAuthStateChanged,
+  signOut,
+  sendPasswordResetEmail,
+} from '/js/auth.js';
+import {
+  fetchBillingStatus,
+  startPremiumCheckout,
+  cancelSubscription,
+} from '/js/billing.js';
+
+const content = document.getElementById('accountContent');
+const shell = document.getElementById('accountShell');
+const boot = document.getElementById('accountBoot');
+const emailEl = document.getElementById('accountEmail');
+const upgradeBtn = document.getElementById('headerUpgradeBtn');
+const signOutBtn = document.getElementById('accountSignOut');
+const mobileNavBtn = document.getElementById('accountMobileNav');
+const sidebar = document.querySelector('.account-sidebar');
+
+let billingStatus = null;
+let flash = null;
+
+function route() {
+  const hash = window.location.hash.replace(/^#/, '') || '/';
+  return hash.startsWith('/') ? hash : `/${hash}`;
+}
+
+function setActiveNav(path) {
+  document.querySelectorAll('.account-nav-link').forEach((link) => {
+    const r = link.dataset.route || '/';
+    link.classList.toggle('is-active', r === path || (path === '' && r === '/'));
+  });
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function showFlash(message, type = 'ok') {
+  flash = { message, type };
+}
+
+function renderFlash() {
+  if (!flash) return '';
+  return `<div class="account-flash ${flash.type}">${flash.message}</div>`;
+}
+
+function planName(status) {
+  return status?.is_premium ? 'Veritas Premium' : 'Veritas Free';
+}
+
+async function refreshBilling() {
+  billingStatus = await fetchBillingStatus();
+  if (upgradeBtn) {
+    upgradeBtn.hidden = Boolean(billingStatus?.is_premium);
+  }
+}
+
+function renderHome() {
+  const premium = Boolean(billingStatus?.is_premium);
+  const end = formatDate(billingStatus?.current_period_end);
+  return `
+    ${renderFlash()}
+    <section class="account-section">
+      <div class="account-section-header">
+        <div>
+          <h1>Home</h1>
+          <p>Your plan and privacy status.</p>
+        </div>
+      </div>
+      <div class="account-card plan-card">
+        <div>
+          <div class="plan-card-title">${planName(billingStatus)}</div>
+          <div class="plan-card-meta">
+            ${
+              premium
+                ? `Active until ${end || '—'}${billingStatus?.cancel_at_period_end ? ' · Cancels at period end' : ''}`
+                : 'Limited free tier · Upgrade anytime with Bitcoin'
+            }
+          </div>
+        </div>
+        <div class="plan-limits">
+          ${
+            premium
+              ? `
+            <div class="plan-limit">All locations</div>
+            <div class="plan-limit">5 devices</div>
+            <div class="plan-limit">Unlimited data</div>`
+              : `
+            <div class="plan-limit">5 locations</div>
+            <div class="plan-limit">1 device</div>
+            <div class="plan-limit">2 GB / month</div>`
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="account-section">
+      <div class="account-section-header">
+        <div>
+          <h2>Upgrade your privacy</h2>
+          <p>${premium ? 'You are on Premium. Renew before expiry to stay protected.' : 'One plan. Paid in Bitcoin.'}</p>
+        </div>
+        <a href="#/subscription">Manage subscription →</a>
+      </div>
+      <div class="account-card upgrade-card">
+        <div>
+          <div class="upgrade-price">$5 <span>/ month</span></div>
+          <p class="plan-card-meta" style="margin-top:8px;">Bitcoin via BTCPay · 30-day period</p>
+        </div>
+        <ul class="upgrade-features">
+          <li>All server locations</li>
+          <li>Unlimited data</li>
+          <li>5 devices at once</li>
+          <li>Ad &amp; tracker blocking DNS</li>
+          <li>Multi-hop routing</li>
+          <li>Kill switch on all platforms</li>
+        </ul>
+        <div class="account-actions">
+          <button type="button" class="btn btn-primary" data-action="checkout">
+            ${premium ? 'Renew with Bitcoin' : 'Upgrade with Bitcoin'}
+          </button>
+          <a class="btn btn-outline" href="#/downloads">Get apps</a>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderSubscription() {
+  const premium = Boolean(billingStatus?.is_premium);
+  const end = formatDate(billingStatus?.current_period_end);
+  return `
+    ${renderFlash()}
+    <section class="account-section">
+      <div class="account-section-header">
+        <div>
+          <h1>Subscription</h1>
+          <p>Manage Free and Premium billing.</p>
+        </div>
+      </div>
+      <div class="account-card">
+        <div class="plan-card-title">${planName(billingStatus)}</div>
+        <p class="plan-card-meta">
+          Status: <strong>${billingStatus?.status || '—'}</strong>
+          ${premium ? ` · Period ends ${end}` : ''}
+          ${billingStatus?.cancel_at_period_end ? ' · Will cancel at period end' : ''}
+        </p>
+        <div class="account-actions">
+          <button type="button" class="btn btn-primary" data-action="checkout">
+            ${premium ? 'Renew with Bitcoin' : 'Upgrade with Bitcoin — $5/mo'}
+          </button>
+          ${
+            premium && !billingStatus?.cancel_at_period_end
+              ? `<button type="button" class="btn btn-outline" data-action="cancel">Cancel at period end</button>`
+              : ''
+          }
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderDownloads() {
+  return `
+    ${renderFlash()}
+    <section class="account-section">
+      <div class="account-section-header">
+        <div>
+          <h1>Downloads</h1>
+          <p>Install VeritasVPN on your devices.</p>
+        </div>
+      </div>
+      <div class="download-grid">
+        <a class="download-tile" href="/install/macos.html">
+          <h3>macOS</h3>
+          <p>Desktop app with system-wide WireGuard (Tauri). DMG coming soon — get on the list.</p>
+          <span class="btn btn-primary btn-sm">Download for Mac</span>
+        </a>
+        <a class="download-tile" href="/install/chrome.html">
+          <h3>Chrome</h3>
+          <p>Browser extension — available now. Load unpacked from the ZIP.</p>
+          <span class="btn btn-primary btn-sm">Add to Chrome</span>
+        </a>
+      </div>
+      <div class="muted-list" aria-label="Coming soon">
+        <span class="muted-chip">Windows — soon</span>
+        <span class="muted-chip">Linux — soon</span>
+        <span class="muted-chip">iPhone / iPad — soon</span>
+        <span class="muted-chip">Android — soon</span>
+        <span class="muted-chip">Firefox — soon</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderAccount(user) {
+  return `
+    ${renderFlash()}
+    <section class="account-section">
+      <div class="account-section-header">
+        <div>
+          <h1>Account</h1>
+          <p>Profile and sign-in.</p>
+        </div>
+      </div>
+      <div class="account-card">
+        <p class="plan-card-meta">Email</p>
+        <div class="plan-card-title" style="font-size:18px;">${user.email || '—'}</div>
+        <p class="plan-card-meta" style="margin-top:12px;">User ID</p>
+        <code style="font-size:12px;color:var(--text-muted);word-break:break-all;">${user.uid}</code>
+        <div class="account-actions">
+          <button type="button" class="btn btn-outline" data-action="reset-password">Send password reset email</button>
+          <button type="button" class="btn btn-primary" data-action="signout">Sign out</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderSecurity() {
+  return `
+    ${renderFlash()}
+    <section class="account-section">
+      <div class="account-section-header">
+        <div>
+          <h1>Security &amp; privacy</h1>
+          <p>How VeritasVPN protects you.</p>
+        </div>
+      </div>
+      <div class="account-card">
+        <ul class="upgrade-features">
+          <li>WireGuard-only protocol</li>
+          <li>No-logs policy — open-source clients &amp; infra</li>
+          <li>Premium paid with Bitcoin (no card required)</li>
+          <li>Diskless / RAM-oriented server design (roadmap)</li>
+        </ul>
+        <div class="account-actions">
+          <a class="btn btn-outline" href="/#transparency">Transparency</a>
+          <a class="btn btn-outline" href="https://github.com/JPG19/VeritasVPN" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function render() {
+  const path = route();
+  setActiveNav(path === '' ? '/' : path);
+  const user = auth.currentUser;
+  if (!user) return;
+
+  let html = '';
+  switch (path) {
+    case '/subscription':
+      html = renderSubscription();
+      break;
+    case '/downloads':
+      html = renderDownloads();
+      break;
+    case '/account':
+      html = renderAccount(user);
+      break;
+    case '/security':
+      html = renderSecurity();
+      break;
+    case '/':
+    default:
+      html = renderHome();
+      break;
+  }
+  content.innerHTML = html;
+  flash = null;
+}
+
+async function onAction(action, btn) {
+  try {
+    if (action === 'checkout') {
+      btn.disabled = true;
+      btn.textContent = 'Starting checkout…';
+      await startPremiumCheckout();
+      return;
+    }
+    if (action === 'cancel') {
+      if (!confirm('Cancel Premium at the end of the current period?')) return;
+      btn.disabled = true;
+      await cancelSubscription();
+      showFlash('Premium will cancel at period end.', 'ok');
+      await refreshBilling();
+      render();
+      return;
+    }
+    if (action === 'reset-password') {
+      if (!auth.currentUser?.email) return;
+      await sendPasswordResetEmail(auth, auth.currentUser.email);
+      showFlash('Password reset email sent.', 'ok');
+      render();
+      return;
+    }
+    if (action === 'signout') {
+      await signOut(auth);
+      window.location.href = '/';
+    }
+  } catch (err) {
+    showFlash(err.message || 'Something went wrong', 'error');
+    render();
+  }
+}
+
+content.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  e.preventDefault();
+  await onAction(btn.dataset.action, btn);
+});
+
+upgradeBtn?.addEventListener('click', () => {
+  window.location.hash = '#/subscription';
+});
+
+signOutBtn?.addEventListener('click', async () => {
+  await signOut(auth);
+  window.location.href = '/';
+});
+
+mobileNavBtn?.addEventListener('click', () => {
+  sidebar?.classList.toggle('is-open');
+});
+
+document.querySelectorAll('.account-nav-link').forEach((link) => {
+  link.addEventListener('click', () => sidebar?.classList.remove('is-open'));
+});
+
+window.addEventListener('hashchange', () => render());
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    window.location.replace(`/?signin=1`);
+    return;
+  }
+
+  emailEl.textContent = user.email || user.uid;
+  boot.hidden = true;
+  shell.hidden = false;
+
+  try {
+    await refreshBilling();
+  } catch (err) {
+    showFlash(err.message || 'Could not load subscription status', 'error');
+    billingStatus = { is_premium: false, tier: 'free', status: 'unknown' };
+  }
+  render();
+});

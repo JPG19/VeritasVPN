@@ -94,6 +94,8 @@ The marketing/landing page lives in `website/`. Open `website/index.html` in a b
 cd website && python3 -m http.server 8000
 ```
 
+Pricing on the site is **Free** and **Premium ($5/mo, Bitcoin)**. Payment build plan: [`docs/BITCOIN_PAYMENTS_IMPLEMENTATION_PLAN.md`](docs/BITCOIN_PAYMENTS_IMPLEMENTATION_PLAN.md).
+
 ## License
 
 Source available. Proprietary components are BSL licensed.

@@ -1,0 +1,10 @@
+{
+  "name": "veritasvpn-desktop",
+  "private": true,
+  "version": "0.0.1",
+  "description": "VeritasVPN desktop client (Tauri 2 + React) — macOS-first scaffold",
+  "scripts": {
+    "dev": "echo \"Scaffold Tauri app first — see README.md\"",
+    "tauri": "echo \"Run after npm create tauri-app — see README.md\""
+  }
+}

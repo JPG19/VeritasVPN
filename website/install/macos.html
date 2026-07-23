@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download VeritasVPN for macOS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="icon" type="image/png" href="../assets/logo-mark.png">
+</head>
+<body>
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="/" class="logo">
+                <img src="../assets/logo-mark.png" alt="" class="logo-mark" width="36" height="36">
+                <span class="logo-text">Veritas<span class="logo-highlight">VPN</span></span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="/downloads.html">Download</a></li>
+                <li><a href="/#pricing">Pricing</a></li>
+            </ul>
+            <div class="nav-auth">
+                <div id="navAuthLoggedOut" class="nav-auth-logged-out">
+                    <button type="button" class="btn btn-outline nav-login" data-auth-open="signin">Log in</button>
+                    <button type="button" class="btn btn-primary nav-cta" data-auth-open="signup">Get Started</button>
+                </div>
+                <div id="navAuthLoggedIn" class="nav-auth-logged-in is-hidden">
+                    <span id="navPlanBadge" class="nav-plan-badge" hidden>Free</span>
+                    <button type="button" class="nav-user-btn" id="navUserMenuBtn">
+                        <span class="nav-user-avatar" aria-hidden="true"></span>
+                        <span id="navUserEmail" class="nav-user-email"></span>
+                    </button>
+                    <div class="nav-user-menu" id="navUserMenu" role="menu">
+                        <button type="button" class="nav-user-menu-item" id="authSignOut" role="menuitem">Sign out</button>
+                    </div>
+                </div>
+            </div>
+            <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
+        </div>
+    </nav>
+
+    <main class="downloads-page">
+        <section class="downloads-hero">
+            <div class="container">
+                <h1>VeritasVPN for macOS</h1>
+                <p>Native desktop app (Tauri) with system-wide WireGuard — Apple silicon &amp; Intel.</p>
+                <div class="hero-actions" style="justify-content:center;margin-top:28px;">
+                    <a class="btn btn-primary btn-lg" href="#notify" id="macosNotify">Get macOS updates</a>
+                    <a class="btn btn-outline btn-lg" href="/install/chrome.html">Use Chrome meanwhile</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="downloads">
+            <div class="container install-steps">
+                <h2>Status</h2>
+                <p class="install-lead">The macOS app scaffold lives in <code>clients/desktop/</code>. A notarized <strong>.dmg</strong> is not published yet. When it is, this button will download it directly (Proton-style).</p>
+                <ol class="install-list" id="notify">
+                    <li>
+                        <strong>Create your account</strong>
+                        <p>Sign up on the website (Free or Premium). The same login will work in the Mac app.</p>
+                    </li>
+                    <li>
+                        <strong>Prefer browser protection today?</strong>
+                        <p>Install the <a href="/install/chrome.html">Chrome extension</a> for browser-only routing while the Mac app finishes.</p>
+                    </li>
+                    <li>
+                        <strong>Developers</strong>
+                        <p>See <code>clients/desktop/README.md</code> and the Tauri phase in <code>IMPLEMENTATION_PLAN.md</code> to build locally.</p>
+                    </li>
+                </ol>
+                <p class="downloads-note">Want early access? Sign in on the site — we’ll use your account when TestFlight / DMG betas open.</p>
+            </div>
+        </section>
+    </main>
+
+    <div class="auth-modal" id="authModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+        <div class="auth-dialog">
+            <button type="button" class="auth-close" data-auth-close aria-label="Close">&times;</button>
+            <div class="auth-brand">
+                <img src="../assets/logo-mark.png" alt="" width="48" height="48">
+                <p class="auth-brand-name">Veritas<span>VPN</span></p>
+            </div>
+            <div class="auth-tabs" role="tablist">
+                <button type="button" class="auth-tab is-active" data-auth-tab="signin" role="tab" aria-selected="true">Sign in</button>
+                <button type="button" class="auth-tab" data-auth-tab="signup" role="tab" aria-selected="false">Sign up</button>
+            </div>
+            <h2 id="authTitle" class="auth-title">Sign in</h2>
+            <p id="authError" class="auth-error" hidden></p>
+            <form id="authForm" class="auth-form" novalidate>
+                <label class="auth-field"><span>Email</span><input type="email" id="authEmail" required></label>
+                <label class="auth-field"><span>Password</span><input type="password" id="authPassword" required minlength="6"></label>
+                <button type="button" class="auth-reset" id="authReset">Forgot password?</button>
+                <button type="submit" class="btn btn-primary btn-block" id="authSubmit">Sign in</button>
+            </form>
+            <div class="auth-divider"><span>or</span></div>
+            <button type="button" class="btn btn-outline btn-block auth-google" id="authGoogle">Continue with Google</button>
+            <button type="button" class="auth-switch" id="authSwitchHint">Don't have an account? Sign up</button>
+        </div>
+    </div>
+    <script type="module" src="../js/main.js"></script>
+    <script type="module">
+      import { requireAuthOrOpenModal } from '../js/auth.js';
+      document.getElementById('macosNotify')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!requireAuthOrOpenModal('signup')) return;
+        alert('You\'re signed in. We\'ll notify macOS beta users via your account email when the DMG is ready.');
+      });
+    </script>
+</body>
+</html>

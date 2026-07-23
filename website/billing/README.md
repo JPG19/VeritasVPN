@@ -1,0 +1,13 @@
+# billing/
+
+## Useful information (humans)
+
+Static return pages after Bitcoin checkout:
+
+- `success.html` — payment confirmed / mock settle redirect target
+- `cancel.html` — user abandoned checkout
+
+## Useful information (AI)
+
+- Success URL default: `CHECKOUT_SUCCESS_URL=http://localhost:8000/billing/success.html`
+- Served by the same static website server as `index.html`.

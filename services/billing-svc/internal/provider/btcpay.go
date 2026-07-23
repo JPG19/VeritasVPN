@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/veritasvpn/lib/logging"
@@ -16,24 +17,30 @@ import (
 )
 
 type BTCPayProvider struct {
-	log        *logging.Logger
-	serverURL  string
-	apiKey     string
-	httpClient *http.Client
+	log           *logging.Logger
+	serverURL     string
+	apiKey        string
+	storeID       string
+	webhookSecret string
+	redirectURL   string
+	httpClient    *http.Client
 }
 
-func NewBTCPayProvider(log *logging.Logger, serverURL, apiKey string) *BTCPayProvider {
+func NewBTCPayProvider(log *logging.Logger, serverURL, apiKey, storeID, webhookSecret, redirectURL string) *BTCPayProvider {
 	return &BTCPayProvider{
-		log:        log,
-		serverURL:  serverURL,
-		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		log:           log,
+		serverURL:     strings.TrimRight(serverURL, "/"),
+		apiKey:        apiKey,
+		storeID:       storeID,
+		webhookSecret: webhookSecret,
+		redirectURL:   redirectURL,
+		httpClient:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
 type BTCPayInvoiceRequest struct {
-	Amount   float64 `json:"amount"`
-	Currency string  `json:"currency"`
+	Amount   string `json:"amount"`
+	Currency string `json:"currency"`
 	Metadata struct {
 		AccountID string `json:"account_id"`
 		Tier      string `json:"tier"`
@@ -44,32 +51,38 @@ type BTCPayInvoiceRequest struct {
 }
 
 type BTCPayInvoiceResponse struct {
-	ID         string `json:"id"`
+	ID           string `json:"id"`
 	CheckoutLink string `json:"checkoutLink"`
-	Status     string `json:"status"`
+	Status       string `json:"status"`
 }
 
-func (b *BTCPayProvider) CreateInvoice(accountID, tier string, amount float64) (string, string, error) {
+// WebhookEvent is a normalized BTCPay webhook payload.
+type WebhookEvent struct {
+	Type      string
+	InvoiceID string
+	AccountID string
+	Tier      string
+}
+
+func (b *BTCPayProvider) CreateInvoice(accountID, tier string, amountUSD float64) (invoiceID, checkoutURL string, err error) {
 	invReq := BTCPayInvoiceRequest{
-		Amount:   amount,
+		Amount:   fmt.Sprintf("%.2f", amountUSD),
 		Currency: "USD",
 	}
 	invReq.Metadata.AccountID = accountID
 	invReq.Metadata.Tier = tier
-	invReq.Checkout.RedirectURL = "https://veritasvpn.com/success"
+	invReq.Checkout.RedirectURL = b.redirectURL
 
 	body, err := json.Marshal(invReq)
 	if err != nil {
 		return "", "", fmt.Errorf("marshal invoice request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/api/v1/stores/default/invoices", b.serverURL)
-
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	url := fmt.Sprintf("%s/api/v1/stores/%s/invoices", b.serverURL, b.storeID)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", "", fmt.Errorf("create btcpay request: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "token "+b.apiKey)
 
@@ -83,7 +96,6 @@ func (b *BTCPayProvider) CreateInvoice(accountID, tier string, amount float64) (
 	if err != nil {
 		return "", "", fmt.Errorf("read btcpay response: %w", err)
 	}
-
 	if resp.StatusCode >= 400 {
 		b.log.Error("btcpay api error",
 			zap.Int("status", resp.StatusCode),
@@ -96,69 +108,51 @@ func (b *BTCPayProvider) CreateInvoice(accountID, tier string, amount float64) (
 	if err := json.Unmarshal(respBody, &invoice); err != nil {
 		return "", "", fmt.Errorf("unmarshal btcpay response: %w", err)
 	}
-
 	return invoice.ID, invoice.CheckoutLink, nil
 }
 
-func (b *BTCPayProvider) HandleWebhook(payload []byte, signature string) error {
-	if !b.verifySignature(payload, signature) {
-		return fmt.Errorf("invalid btcpay webhook signature")
+func (b *BTCPayProvider) ParseWebhook(payload []byte, signature string) (*WebhookEvent, error) {
+	if err := b.verifySignature(payload, signature); err != nil {
+		return nil, err
 	}
 
-	var event struct {
-		Type          string `json:"type"`
-		InvoiceID     string `json:"invoiceId"`
-		DeliveryID    string `json:"deliveryId"`
-		WebhookID     string `json:"webhookId"`
-		OriginalDeliveryID string `json:"originalDeliveryId"`
-		Timestamp     int64  `json:"timestamp"`
-		Metadata      struct {
+	var raw struct {
+		Type      string `json:"type"`
+		InvoiceID string `json:"invoiceId"`
+		Metadata  struct {
 			AccountID string `json:"account_id"`
 			Tier      string `json:"tier"`
 		} `json:"metadata"`
 	}
-	if err := json.Unmarshal(payload, &event); err != nil {
-		return fmt.Errorf("unmarshal btcpay event: %w", err)
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return nil, fmt.Errorf("unmarshal btcpay event: %w", err)
 	}
 
-	b.log.Info("btcpay webhook received",
-		zap.String("type", event.Type),
-		zap.String("invoice_id", event.InvoiceID),
-	)
-
-	switch event.Type {
-	case "InvoiceReceivedPayment":
-		b.log.Info("btcpay invoice payment received",
-			zap.String("invoice_id", event.InvoiceID),
-			zap.String("account_id", event.Metadata.AccountID),
-			zap.String("tier", event.Metadata.Tier),
-		)
-		return nil
-	case "InvoiceSettled":
-		b.log.Info("btcpay invoice settled",
-			zap.String("invoice_id", event.InvoiceID),
-			zap.String("account_id", event.Metadata.AccountID),
-		)
-		return nil
-	case "InvoiceExpired":
-		b.log.Warn("btcpay invoice expired",
-			zap.String("invoice_id", event.InvoiceID),
-			zap.String("account_id", event.Metadata.AccountID),
-		)
-		return nil
-	default:
-		b.log.Debug("unhandled btcpay event type", zap.String("type", event.Type))
-		return nil
-	}
+	return &WebhookEvent{
+		Type:      raw.Type,
+		InvoiceID: raw.InvoiceID,
+		AccountID: raw.Metadata.AccountID,
+		Tier:      raw.Metadata.Tier,
+	}, nil
 }
 
-func (b *BTCPayProvider) verifySignature(payload []byte, signature string) bool {
-	if b.apiKey == "" {
-		return true
+func (b *BTCPayProvider) verifySignature(payload []byte, signature string) error {
+	if b.webhookSecret == "" {
+		// Development only — production must set BTCPAY_WEBHOOK_SECRET.
+		b.log.Warn("btcpay webhook signature verification skipped (no webhook secret)")
+		return nil
+	}
+	if signature == "" {
+		return fmt.Errorf("missing BTCPay-Sig header")
 	}
 
-	mac := hmac.New(sha256.New, []byte(b.apiKey))
+	// BTCPay sends: sha256=<hex>
+	sig := strings.TrimPrefix(signature, "sha256=")
+	mac := hmac.New(sha256.New, []byte(b.webhookSecret))
 	mac.Write(payload)
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(expectedSig), []byte(signature))
+	expected := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(expected), []byte(sig)) {
+		return fmt.Errorf("invalid btcpay webhook signature")
+	}
+	return nil
 }
