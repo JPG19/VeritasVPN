@@ -19,6 +19,7 @@ import (
 type BTCPayProvider struct {
 	log           *logging.Logger
 	serverURL     string
+	publicURL     string
 	apiKey        string
 	storeID       string
 	webhookSecret string
@@ -108,7 +109,16 @@ func (b *BTCPayProvider) CreateInvoice(accountID, tier string, amountUSD float64
 	if err := json.Unmarshal(respBody, &invoice); err != nil {
 		return "", "", fmt.Errorf("unmarshal btcpay response: %w", err)
 	}
-	return invoice.ID, invoice.CheckoutLink, nil
+
+	checkoutURL = invoice.CheckoutLink
+	if b.publicURL != "" {
+		checkoutURL = strings.Replace(invoice.CheckoutLink, b.serverURL, b.publicURL, 1)
+	}
+	return invoice.ID, checkoutURL, nil
+}
+
+func (b *BTCPayProvider) SetPublicURL(publicURL string) {
+	b.publicURL = strings.TrimRight(publicURL, "/")
 }
 
 func (b *BTCPayProvider) ParseWebhook(payload []byte, signature string) (*WebhookEvent, error) {

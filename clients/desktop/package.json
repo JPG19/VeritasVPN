@@ -1,10 +1,26 @@
 {
   "name": "veritasvpn-desktop",
   "private": true,
-  "version": "0.0.1",
-  "description": "VeritasVPN desktop client (Tauri 2 + React) — macOS-first scaffold",
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "dev": "echo \"Scaffold Tauri app first — see README.md\"",
-    "tauri": "echo \"Run after npm create tauri-app — see README.md\""
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-shell": "^2",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4",
+    "typescript": "^5.7",
+    "vite": "^6"
   }
 }

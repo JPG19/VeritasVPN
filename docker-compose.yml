@@ -83,6 +83,9 @@ services:
       dockerfile: services/billing-svc/Dockerfile
     ports:
       - "8083:8080"
+    networks:
+      - default
+      - btcpay_default
     environment:
       DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
       NATS_URL: nats://nats:4222
@@ -92,6 +95,7 @@ services:
       BTCPAY_API_KEY: ${BTCPAY_API_KEY:-}
       BTCPAY_STORE_ID: ${BTCPAY_STORE_ID:-}
       BTCPAY_WEBHOOK_SECRET: ${BTCPAY_WEBHOOK_SECRET:-}
+      BTCPAY_PUBLIC_URL: ${BTCPAY_PUBLIC_URL:-}
       PREMIUM_PRICE_USD_CENTS: ${PREMIUM_PRICE_USD_CENTS:-500}
       PREMIUM_PERIOD_DAYS: ${PREMIUM_PERIOD_DAYS:-30}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-veritasvpn-37cf6}
@@ -107,6 +111,15 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+
+  veritas-proxy:
+    build:
+      context: ./containers/proxy-gateway
+      dockerfile: Dockerfile
+    container_name: veritas-proxy
+    ports:
+      - "1080:1080/tcp"
+    restart: unless-stopped
 
   nginx:
     image: nginx:1.27-alpine
@@ -128,6 +141,10 @@ services:
     restart: unless-stopped
     depends_on:
       - nginx
+
+networks:
+  btcpay_default:
+    external: true
 
 volumes:
   pgdata:

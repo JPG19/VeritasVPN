@@ -83,6 +83,9 @@ func main() {
 			cfg.BTCPayWebhookSecret,
 			cfg.CheckoutSuccessURL,
 		)
+		if cfg.BTCPayPublicURL != "" {
+			btcpay.SetPublicURL(cfg.BTCPayPublicURL)
+		}
 		invoiceCreator = btcpay
 		log.Info("BTCPay provider configured", zap.String("url", cfg.BTCPayServerURL), zap.String("store", cfg.BTCPayStoreID))
 	}

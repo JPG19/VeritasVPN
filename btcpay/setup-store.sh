@@ -9,7 +9,7 @@ set -e
 BTCPAY_URL="http://localhost:49392"
 ADMIN_EMAIL="${1:-}"
 ADMIN_PASSWORD="${2:-}"
-BILLING_SVC_WEBHOOK_URL="${3:-http://host.docker.internal:8083/api/v1/billing/webhook/btcpay}"
+BILLING_SVC_WEBHOOK_URL="${3:-http://billing-svc:8080/api/v1/billing/webhook/btcpay}"
 
 if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
     echo "Usage: $0 <admin_email> <admin_password> [webhook_url]"
@@ -75,7 +75,7 @@ WEBHOOK_SECRET="whsec_$(openssl rand -hex 20 2>/dev/null || python3 -c "import s
 
 WEBHOOK_RESP=$(curl -s -b /tmp/btcpay_cookies.txt -X POST "$BTCPAY_URL/api/v1/stores/$STORE_ID/webhooks" \
     -H "Content-Type: application/json" \
-    -d "{\"url\":\"$BILLING_SVC_WEBHOOK_URL\",\"secret\":\"$WEBHOOK_SECRET\",\"enabled\":true,\"automaticRedelivery\":true,\"events\":[\"InvoiceReceivedPayment\",\"InvoicePaymentSettled\",\"InvoiceProcessing\",\"InvoiceExpired\",\"InvoiceInvalid\"]}")
+    -d "{\"url\":\"$BILLING_SVC_WEBHOOK_URL\",\"secret\":\"$WEBHOOK_SECRET\",\"enabled\":true,\"automaticRedelivery\":true,\"authorizedEvents\":{\"everything\":true}}")
 
 if echo "$WEBHOOK_RESP" | grep -q "error\|invalid\|400\|500"; then
     echo "WARNING: Webhook creation may have failed."
@@ -106,6 +106,7 @@ echo "  BTCPAY_SERVER_URL=http://localhost:49392"
 echo "  BTCPAY_STORE_ID=$STORE_ID"
 echo "  BTCPAY_API_KEY=$API_KEY"
 echo "  BTCPAY_WEBHOOK_SECRET=$WEBHOOK_SECRET"
+echo "  BTCPAY_PUBLIC_URL=https://btcpay.veritasvpn.cloud"
 echo ""
 echo "Test creating an invoice:"
 echo "  curl -X POST http://localhost:8083/api/v1/billing/subscribe \\"
