@@ -1,7 +1,6 @@
 import { auth, getIdToken, requireAuthOrOpenModal } from './auth.js';
 
-const BILLING_API =
-  window.VERITAS_BILLING_API || 'http://localhost:8083';
+const BILLING_API = '';
 
 async function api(path, options = {}) {
   const token = await getIdToken();
@@ -35,7 +34,7 @@ export async function startPremiumCheckout() {
   if (!data.checkout_url) {
     throw new Error('No checkout URL returned');
   }
-  window.location.href = data.checkout_url;
+  window.open(data.checkout_url, '_blank');
 }
 
 export async function cancelSubscription() {

@@ -1,0 +1,81 @@
+name: Build VeritasVPN Desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: clients/desktop
+
+      - name: Build .dmg
+        run: npx tauri build
+        working-directory: clients/desktop
+
+      - name: Upload .dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: veritasvpn-macos
+          path: clients/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system deps
+        run: |
+          sudo apt update
+          sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libglib2.0-dev librsvg2-dev patchelf
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: clients/desktop
+
+      - name: Build .deb and .AppImage
+        run: npx tauri build
+        working-directory: clients/desktop
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: veritasvpn-linux-deb
+          path: clients/desktop/src-tauri/target/release/bundle/deb/*.deb
+
+      - name: Upload .AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: veritasvpn-linux-appimage
+          path: clients/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+
+  release:
+    needs: [build-macos, build-linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            veritasvpn-macos/*.dmg
+            veritasvpn-linux-deb/*.deb
+            veritasvpn-linux-appimage/*.AppImage

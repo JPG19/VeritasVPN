@@ -8,7 +8,7 @@ import {
   fetchBillingStatus,
   startPremiumCheckout,
   cancelSubscription,
-} from '/js/billing.js';
+} from '/js/billing.js?v=2';
 
 const content = document.getElementById('accountContent');
 const shell = document.getElementById('accountShell');
@@ -185,18 +185,22 @@ function renderDownloads() {
       <div class="download-grid">
         <a class="download-tile" href="/install/macos.html">
           <h3>macOS</h3>
-          <p>Desktop app with system-wide WireGuard (Tauri). DMG coming soon — get on the list.</p>
-          <span class="btn btn-primary btn-sm">Download for Mac</span>
+          <p>Desktop app — build from source on your Mac. One command to produce a .dmg.</p>
+          <span class="btn btn-primary btn-sm">Build for Mac</span>
         </a>
         <a class="download-tile" href="/install/chrome.html">
           <h3>Chrome</h3>
           <p>Browser extension — available now. Load unpacked from the ZIP.</p>
           <span class="btn btn-primary btn-sm">Add to Chrome</span>
         </a>
+        <a class="download-tile" href="/install/linux.html">
+          <h3>Linux</h3>
+          <p>Native desktop app. .deb and .AppImage available.</p>
+          <span class="btn btn-primary btn-sm">Download for Linux</span>
+        </a>
       </div>
       <div class="muted-list" aria-label="Coming soon">
         <span class="muted-chip">Windows — soon</span>
-        <span class="muted-chip">Linux — soon</span>
         <span class="muted-chip">iPhone / iPad — soon</span>
         <span class="muted-chip">Android — soon</span>
         <span class="muted-chip">Firefox — soon</span>

@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
-    <link rel="icon" type="image/png" href="../assets/logo-mark.png">
+    <link rel="icon" type="image/png" href="../assets/favicon.png">
 </head>
 <body>
     <nav class="navbar" id="navbar">
@@ -45,9 +45,9 @@
         <section class="downloads-hero">
             <div class="container">
                 <h1>VeritasVPN for macOS</h1>
-                <p>Native desktop app (Tauri) with system-wide WireGuard — Apple silicon &amp; Intel.</p>
+                <p>Native Tauri desktop app — sets system-wide SOCKS5 proxy. Apple silicon &amp; Intel.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
-                    <a class="btn btn-primary btn-lg" href="#notify" id="macosNotify">Get macOS updates</a>
+                    <a class="btn btn-primary btn-lg" href="https://github.com/JPG19/VeritasVPN/releases/latest" target="_blank" rel="noopener">Download latest .dmg</a>
                     <a class="btn btn-outline btn-lg" href="/install/chrome.html">Use Chrome meanwhile</a>
                 </div>
             </div>
@@ -55,23 +55,22 @@
 
         <section class="downloads">
             <div class="container install-steps">
-                <h2>Status</h2>
-                <p class="install-lead">The macOS app scaffold lives in <code>clients/desktop/</code>. A notarized <strong>.dmg</strong> is not published yet. When it is, this button will download it directly (Proton-style).</p>
-                <ol class="install-list" id="notify">
+                <h2>Install in 3 steps</h2>
+                <ol class="install-list">
                     <li>
-                        <strong>Create your account</strong>
-                        <p>Sign up on the website (Free or Premium). The same login will work in the Mac app.</p>
+                        <strong>Download the .dmg</strong>
+                        <p>Get the latest build from <a href="https://github.com/JPG19/VeritasVPN/releases" target="_blank" rel="noopener">GitHub Releases</a>. Built automatically by CI on every version tag.</p>
                     </li>
                     <li>
-                        <strong>Prefer browser protection today?</strong>
-                        <p>Install the <a href="/install/chrome.html">Chrome extension</a> for browser-only routing while the Mac app finishes.</p>
+                        <strong>Install</strong>
+                        <p>Open the .dmg, drag VeritasVPN to your Applications folder.</p>
                     </li>
                     <li>
-                        <strong>Developers</strong>
-                        <p>See <code>clients/desktop/README.md</code> and the Tauri phase in <code>IMPLEMENTATION_PLAN.md</code> to build locally.</p>
+                        <strong>First launch</strong>
+                        <p>Right-click the app and select Open (to bypass Gatekeeper for now). Then sign in and hit Connect.</p>
                     </li>
                 </ol>
-                <p class="downloads-note">Want early access? Sign in on the site — we’ll use your account when TestFlight / DMG betas open.</p>
+                <p class="downloads-note">Notarization and direct download coming soon. For now, builds are distributed via GitHub Releases. To build locally: <code>cd clients/desktop && npm install && npx tauri build</code></p>
             </div>
         </section>
     </main>
@@ -101,13 +100,5 @@
         </div>
     </div>
     <script type="module" src="../js/main.js"></script>
-    <script type="module">
-      import { requireAuthOrOpenModal } from '../js/auth.js';
-      document.getElementById('macosNotify')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (!requireAuthOrOpenModal('signup')) return;
-        alert('You\'re signed in. We\'ll notify macOS beta users via your account email when the DMG is ready.');
-      });
-    </script>
 </body>
 </html>

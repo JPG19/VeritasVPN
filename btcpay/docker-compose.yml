@@ -76,12 +76,19 @@ services:
       BTCPAY_CHECKREVOCATIONLIST: "false"
     ports:
       - "49392:49392"
+    networks:
+      - default
+      - veritasvpn_default
     depends_on:
       postgres-btcpay:
         condition: service_healthy
       nbxplorer:
         condition: service_started
     restart: unless-stopped
+
+networks:
+  veritasvpn_default:
+    external: true
 
 volumes:
   btcpay_pgdata:

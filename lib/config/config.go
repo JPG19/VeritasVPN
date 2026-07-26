@@ -22,6 +22,7 @@ type Config struct {
 	BTCPayAPIKey        string
 	BTCPayStoreID       string
 	BTCPayWebhookSecret string
+	BTCPayPublicURL     string
 
 	PremiumPriceUSDCents int64
 	PremiumPeriodDays    int
@@ -53,6 +54,7 @@ func Load() *Config {
 		BTCPayAPIKey:        os.Getenv("BTCPAY_API_KEY"),
 		BTCPayStoreID:       envOrDefault("BTCPAY_STORE_ID", "default"),
 		BTCPayWebhookSecret: os.Getenv("BTCPAY_WEBHOOK_SECRET"),
+		BTCPayPublicURL:     os.Getenv("BTCPAY_PUBLIC_URL"),
 
 		PremiumPriceUSDCents: int64EnvOrDefault("PREMIUM_PRICE_USD_CENTS", 500),
 		PremiumPeriodDays:    intEnvOrDefault("PREMIUM_PERIOD_DAYS", 30),
