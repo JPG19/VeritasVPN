@@ -75,6 +75,3 @@ cloudflared
 btcpay/.env
 containers/proxy-gateway/data/
 website/downloads/veritasvpn-linux.*
-*.AppImage
-*.deb
-*.rpm
