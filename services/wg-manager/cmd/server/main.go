@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
@@ -14,11 +15,11 @@ import (
 	"github.com/veritasvpn/lib/logging"
 	"github.com/veritasvpn/services/wg-manager/internal/communicator"
 	"github.com/veritasvpn/services/wg-manager/internal/handler"
+	"github.com/veritasvpn/services/wg-manager/internal/hub"
+	"github.com/veritasvpn/services/wg-manager/internal/migrate"
 	"github.com/veritasvpn/services/wg-manager/internal/repository"
 	"github.com/veritasvpn/services/wg-manager/internal/scheduler"
 	"github.com/veritasvpn/services/wg-manager/internal/service"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
 func main() {
@@ -45,6 +46,11 @@ func main() {
 	}
 	log.Info("connected to postgres")
 
+	if err := migrate.Up(ctx, pool); err != nil {
+		log.Fatal("failed to apply wg migrations", "error", err)
+	}
+	log.Info("wg migrations applied")
+
 	redisRepo, err := repository.NewRedis(cfg.RedisURL)
 	if err != nil {
 		log.Fatal("failed to create redis client", "error", err)
@@ -64,31 +70,25 @@ func main() {
 
 	pgRepo := repository.NewPostgres(pool)
 	sched := scheduler.New(pgRepo, log)
-	agentClient := communicator.NewLoggingAgentClient(log)
+	sseHub := hub.New(log)
+	agentClient := communicator.NewSSEAgentClient(sseHub, log)
 	comm := communicator.New(agentClient, log)
 
 	svc := service.New(pgRepo, redisRepo, sched, comm, nc, cfg.AgentAuthToken, log)
+	httpHandler := handler.NewHTTPHandler(svc, sseHub, cfg.JWTSecret, cfg.AgentAuthToken, log)
 
-	wgHandler := handler.NewWireGuardHandler(svc, log)
-	agentHandler := handler.NewAgentHandler(svc, log)
-
-	grpcAddr := cfg.GRPCServerAddr()
-	lis, err := net.Listen("tcp", grpcAddr)
-	if err != nil {
-		log.Fatal("failed to listen", "addr", grpcAddr, "error", err)
+	httpAddr := cfg.HTTPServerAddr()
+	httpSrv := &http.Server{
+		Addr:              httpAddr,
+		Handler:           httpHandler.Routes(),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
-
-	grpcSrv := grpc.NewServer()
-	reflection.Register(grpcSrv)
-
-	handler.RegisterWireGuardServiceServer(grpcSrv, wgHandler)
-	handler.RegisterAgentServiceServer(grpcSrv, agentHandler)
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("starting gRPC server", "addr", grpcAddr)
-		if err := grpcSrv.Serve(lis); err != nil {
-			errCh <- fmt.Errorf("grpc serve: %w", err)
+		log.Info("starting HTTP server", "addr", httpAddr)
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- fmt.Errorf("http serve: %w", err)
 		}
 	}()
 
@@ -103,7 +103,8 @@ func main() {
 	}
 
 	cancel()
-	grpcSrv.GracefulStop()
-	lis.Close()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	_ = httpSrv.Shutdown(shutdownCtx)
 	log.Info("server stopped")
 }

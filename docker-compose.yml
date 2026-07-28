@@ -66,7 +66,8 @@ services:
       DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       NATS_URL: nats://nats:4222
-      AGENT_AUTH_TOKEN: dev-agent-token
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production-use-64-char-random-string}
+      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:-dev-agent-token}
       LOG_LEVEL: debug
       LOG_FORMAT: console
       ENVIRONMENT: development
@@ -77,6 +78,33 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+
+  veritas-agent:
+    build:
+      context: .
+      dockerfile: services/veritas-agent/Dockerfile
+    network_mode: host
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:-dev-agent-token}
+      MANAGER_ENDPOINT: ${MANAGER_ENDPOINT:-http://127.0.0.1:8082}
+      PUBLIC_IP: ${PUBLIC_IP:-REDACTED_IP}
+      WG_INTERFACE: wg0
+      WG_PORT: "51820"
+      WG_PRIVATE_KEY_FILE: /etc/wireguard/private.key
+      SERVER_HOSTNAME: ${SERVER_HOSTNAME:-linuxdesktop}
+      SERVER_REGION: ${SERVER_REGION:-sa}
+      SERVER_CITY: ${SERVER_CITY:-local}
+      SERVER_COUNTRY: ${SERVER_COUNTRY:-AR}
+      LOG_LEVEL: debug
+    volumes:
+      - ./data/wireguard:/etc/wireguard
+    depends_on:
+      - wg-manager
+    restart: unless-stopped
 
   billing-svc:
     build:
@@ -130,6 +158,8 @@ services:
       - ./website/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - billing-svc
+      - wg-manager
+      - auth-svc
     restart: unless-stopped
 
   cloudflared:

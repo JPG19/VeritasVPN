@@ -133,8 +133,18 @@ func (c *Config) ServerAddr() string {
 	return ":" + c.ServerPort
 }
 
+func (c *Config) HTTPServerAddr() string {
+	if strings.HasPrefix(c.ServerPort, ":") {
+		return c.ServerPort
+	}
+	return ":" + c.ServerPort
+}
+
 func (c *Config) GRPCServerAddr() string {
-	port, _ := strconv.Atoi(c.ServerPort)
+	port, err := strconv.Atoi(strings.TrimPrefix(c.ServerPort, ":"))
+	if err != nil {
+		port = 8080
+	}
 	return ":" + strconv.Itoa(port+1000)
 }
 

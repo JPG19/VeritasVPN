@@ -16,6 +16,24 @@ func NewPostgres(pool *pgxpool.Pool) *Postgres {
 	return &Postgres{pool: pool}
 }
 
+func (p *Postgres) GetServerByHostname(ctx context.Context, hostname string) (*model.Server, error) {
+	query := `SELECT id, hostname, region, city, country, public_ip, wg_port,
+	           public_key, status, capacity, load_factor, wg_subnet, dns_server,
+	           created_at, updated_at FROM servers WHERE hostname = $1`
+
+	srv := &model.Server{}
+	err := p.pool.QueryRow(ctx, query, hostname).Scan(
+		&srv.ID, &srv.Hostname, &srv.Region, &srv.City, &srv.Country,
+		&srv.PublicIP, &srv.WGPort, &srv.PublicKey, &srv.Status,
+		&srv.Capacity, &srv.LoadFactor, &srv.WGSubnet, &srv.DNSServer,
+		&srv.CreatedAt, &srv.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get server by hostname: %w", err)
+	}
+	return srv, nil
+}
+
 func (p *Postgres) RegisterServer(ctx context.Context, srv *model.Server) error {
 	query := `INSERT INTO servers (hostname, region, city, country, public_ip,
 	           wg_port, public_key, status, capacity, wg_subnet, dns_server)
@@ -23,15 +41,16 @@ func (p *Postgres) RegisterServer(ctx context.Context, srv *model.Server) error 
 	           ON CONFLICT (hostname) DO UPDATE SET
 	               public_ip = EXCLUDED.public_ip, wg_port = EXCLUDED.wg_port,
 	               public_key = EXCLUDED.public_key, status = EXCLUDED.status,
-	               capacity = EXCLUDED.capacity, wg_subnet = EXCLUDED.wg_subnet,
-	               dns_server = EXCLUDED.dns_server, updated_at = NOW()
-	           RETURNING id`
+	               capacity = EXCLUDED.capacity,
+	               region = EXCLUDED.region, city = EXCLUDED.city, country = EXCLUDED.country,
+	               updated_at = NOW()
+	           RETURNING id, wg_subnet, dns_server`
 
 	return p.pool.QueryRow(ctx, query,
 		srv.Hostname, srv.Region, srv.City, srv.Country,
 		srv.PublicIP, srv.WGPort, srv.PublicKey, srv.Status,
 		srv.Capacity, srv.WGSubnet, srv.DNSServer,
-	).Scan(&srv.ID)
+	).Scan(&srv.ID, &srv.WGSubnet, &srv.DNSServer)
 }
 
 func (p *Postgres) GetServer(ctx context.Context, id string) (*model.Server, error) {
@@ -89,7 +108,7 @@ func (p *Postgres) UpdateServerStatus(ctx context.Context, id, status string) er
 
 func (p *Postgres) UpdateServerLoad(ctx context.Context, id string, peerCount int32, loadFactor float64) error {
 	_, err := p.pool.Exec(ctx,
-		`UPDATE servers SET load_factor = $3, updated_at = NOW() WHERE id = $1`,
+		`UPDATE servers SET load_factor = $2, updated_at = NOW() WHERE id = $1`,
 		id, loadFactor)
 	_ = peerCount
 	return err
@@ -156,7 +175,7 @@ func (p *Postgres) ListPeersByAccount(ctx context.Context, accountID string) ([]
 func (p *Postgres) ListPeersByServer(ctx context.Context, serverID string) ([]model.Peer, error) {
 	query := `SELECT id, account_id, server_id, pubkey, preshared_key,
 	           allowed_ips, assigned_ip, status, created_at, expires_at
-	           FROM peers WHERE server_id = $1 AND status = 'active'
+	           FROM peers WHERE server_id = $1 AND status IN ('pending', 'active')
 	           ORDER BY created_at ASC`
 
 	rows, err := p.pool.Query(ctx, query, serverID)

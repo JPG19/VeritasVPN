@@ -16,14 +16,15 @@ import (
 )
 
 type PeerConfig struct {
-	PeerID          string
-	ServerID        string
-	ServerHostname  string
-	ServerPublicKey string
-	ServerEndpoint  string
-	AssignedIP      string
-	DNSServer       string
-	AllowedIPs      []string
+	PeerID           string
+	ServerID         string
+	ServerHostname   string
+	ServerPublicKey  string
+	ServerEndpoint   string
+	AssignedIP       string
+	DNSServer        string
+	AllowedIPs       []string // server-side peer AllowedIPs (client /32)
+	ClientAllowedIPs []string // client tunnel AllowedIPs (full tunnel)
 }
 
 type Service struct {
@@ -61,12 +62,41 @@ func (s *Service) RegisterServer(ctx context.Context, hostname, publicKey, publi
 		return nil, fmt.Errorf("invalid agent auth token")
 	}
 
+	existing, err := s.postgres.GetServerByHostname(ctx, hostname)
+	if err == nil && existing != nil {
+		existing.PublicIP = publicIP
+		existing.WGPort = wgPort
+		existing.PublicKey = publicKey
+		existing.Status = "online"
+		if region != "" {
+			existing.Region = region
+		}
+		if city != "" {
+			existing.City = city
+		}
+		if country != "" {
+			existing.Country = country
+		}
+		if err := s.postgres.RegisterServer(ctx, existing); err != nil {
+			return nil, fmt.Errorf("update server: %w", err)
+		}
+		s.log.Info("server re-registered",
+			"server_id", existing.ID,
+			"hostname", hostname,
+			"subnet", existing.WGSubnet,
+		)
+		return existing, nil
+	}
+	if err != nil && !strings.Contains(err.Error(), "no rows") {
+		return nil, fmt.Errorf("lookup server: %w", err)
+	}
+
 	subnet, err := s.allocateSubnet(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	dnsServer := strings.Replace(strings.Replace(subnet, ".0/24", ".1", 1), ".0.0/24", ".0.1", 1)
+	dnsServer := strings.Replace(subnet, ".0/24", ".1", 1)
 
 	srv := &model.Server{
 		Hostname:  hostname,
@@ -157,16 +187,21 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, publicKey, preferre
 	}
 
 	endpoint := fmt.Sprintf("%s:%d", srv.PublicIP, srv.WGPort)
+	serverID := srv.ID
 
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		if err := s.communicator.PushPeerAdded(bgCtx, endpoint, peer); err != nil {
+		if err := s.communicator.PushPeerAdded(bgCtx, serverID, peer); err != nil {
 			s.log.Warn("agent notification failed for new peer",
 				"peer_id", peer.ID,
-				"server", endpoint,
+				"server_id", serverID,
 				"error", err.Error(),
 			)
+			return
+		}
+		if err := s.postgres.UpdatePeerStatus(bgCtx, peer.ID, "active"); err != nil {
+			s.log.Warn("failed to mark peer active", "peer_id", peer.ID, "error", err)
 		}
 	}()
 
@@ -178,22 +213,23 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, publicKey, preferre
 	)
 
 	s.publishEvent("peer.created", map[string]interface{}{
-		"peer_id":      peer.ID,
-		"account_id":   accountID,
-		"server_id":    srv.ID,
-		"assigned_ip":  assignedIP,
+		"peer_id":         peer.ID,
+		"account_id":      accountID,
+		"server_id":       srv.ID,
+		"assigned_ip":     assignedIP,
 		"server_endpoint": endpoint,
 	})
 
 	return &PeerConfig{
-		PeerID:          peer.ID,
-		ServerID:        srv.ID,
-		ServerHostname:  srv.Hostname,
-		ServerPublicKey: srv.PublicKey,
-		ServerEndpoint:  endpoint,
-		AssignedIP:      assignedIP,
-		DNSServer:       srv.DNSServer,
-		AllowedIPs:      []string{assignedIP},
+		PeerID:           peer.ID,
+		ServerID:         srv.ID,
+		ServerHostname:   srv.Hostname,
+		ServerPublicKey:  srv.PublicKey,
+		ServerEndpoint:   endpoint,
+		AssignedIP:       assignedIP,
+		DNSServer:        srv.DNSServer,
+		AllowedIPs:       []string{assignedIP},
+		ClientAllowedIPs: []string{"0.0.0.0/0", "::/0"},
 	}, nil
 }
 
@@ -207,25 +243,19 @@ func (s *Service) DeletePeer(ctx context.Context, peerID, accountID string) erro
 		return fmt.Errorf("delete peer: %w", err)
 	}
 
-	srv, err := s.postgres.GetServer(ctx, peer.ServerID)
-	if err == nil {
-		_ = s.redis.ReleaseIP(ctx, peer.ServerID, peer.AssignedIP)
+	_ = s.redis.ReleaseIP(ctx, peer.ServerID, peer.AssignedIP)
 
-		endpoint := fmt.Sprintf("%s:%d", srv.PublicIP, srv.WGPort)
-		go func() {
-			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err := s.communicator.PushPeerRemoved(bgCtx, endpoint, peer.ID); err != nil {
-				s.log.Warn("agent notification failed for deleted peer",
-					"peer_id", peerID,
-					"server", endpoint,
-					"error", err.Error(),
-				)
-			}
-		}()
-	} else {
-		s.log.Warn("could not get server for peer deletion", "server_id", peer.ServerID, "error", err)
-	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := s.communicator.PushPeerRemoved(bgCtx, peer.ServerID, peer); err != nil {
+			s.log.Warn("agent notification failed for deleted peer",
+				"peer_id", peerID,
+				"server_id", peer.ServerID,
+				"error", err.Error(),
+			)
+		}
+	}()
 
 	s.log.Info("peer deleted", "peer_id", peerID, "account_id", accountID)
 
@@ -261,6 +291,14 @@ func (s *Service) ListPeers(ctx context.Context, accountID string) ([]model.Peer
 	return peers, nil
 }
 
+func (s *Service) ListPeersForServer(ctx context.Context, serverID string) ([]model.Peer, error) {
+	return s.postgres.ListPeersByServer(ctx, serverID)
+}
+
+func (s *Service) MarkPeerActive(ctx context.Context, peerID string) error {
+	return s.postgres.UpdatePeerStatus(ctx, peerID, "active")
+}
+
 func (s *Service) ListServers(ctx context.Context) ([]model.Server, error) {
 	servers, err := s.postgres.ListOnlineServers(ctx)
 	if err != nil {
@@ -274,7 +312,8 @@ func (s *Service) allocateSubnet(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("allocate subnet: %w", err)
 	}
-	return fmt.Sprintf("10.%d.0.0/24", counter), nil
+	// First server -> 10.0.0.0/24 to match typical single-node bootstrap.
+	return fmt.Sprintf("10.%d.0.0/24", counter-1), nil
 }
 
 func (s *Service) publishEvent(subject string, data map[string]interface{}) {

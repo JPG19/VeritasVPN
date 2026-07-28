@@ -41,6 +41,47 @@ func (l *Logger) Sugar() *zap.SugaredLogger {
 	return l.sugar
 }
 
+func (l *Logger) Infow(msg string, keysAndValues ...interface{}) {
+	l.sugar.Infow(msg, keysAndValues...)
+}
+
+func (l *Logger) Warnw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Warnw(msg, keysAndValues...)
+}
+
+func (l *Logger) Errorw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Errorw(msg, keysAndValues...)
+}
+
+func (l *Logger) Debugw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Debugw(msg, keysAndValues...)
+}
+
+func (l *Logger) Fatalw(msg string, keysAndValues ...interface{}) {
+	l.sugar.Fatalw(msg, keysAndValues...)
+}
+
+// Info logs with alternating key/value pairs (sugar style used across services).
+func (l *Logger) Info(msg string, keysAndValues ...interface{}) {
+	l.sugar.Infow(msg, keysAndValues...)
+}
+
+func (l *Logger) Warn(msg string, keysAndValues ...interface{}) {
+	l.sugar.Warnw(msg, keysAndValues...)
+}
+
+func (l *Logger) Error(msg string, keysAndValues ...interface{}) {
+	l.sugar.Errorw(msg, keysAndValues...)
+}
+
+func (l *Logger) Debug(msg string, keysAndValues ...interface{}) {
+	l.sugar.Debugw(msg, keysAndValues...)
+}
+
+func (l *Logger) Fatal(msg string, keysAndValues ...interface{}) {
+	l.sugar.Fatalw(msg, keysAndValues...)
+}
+
 func (l *Logger) With(fields ...zap.Field) *Logger {
 	return &Logger{
 		Logger: l.Logger.With(fields...),

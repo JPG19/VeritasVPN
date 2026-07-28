@@ -3,6 +3,7 @@ package peer
 import (
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/veritasvpn/services/veritas-agent/internal/wireguard"
@@ -122,7 +123,11 @@ func (m *Manager) GetStats() (rxBytes, txBytes int64, peerCount int32) {
 func cidrsToIPNets(cidrs []string) []net.IPNet {
 	ipNets := make([]net.IPNet, 0, len(cidrs))
 	for _, cidr := range cidrs {
-		_, ipNet, err := net.ParseCIDR(cidr)
+		c := cidr
+		if !strings.Contains(c, "/") {
+			c = c + "/32"
+		}
+		_, ipNet, err := net.ParseCIDR(c)
 		if err != nil {
 			continue
 		}

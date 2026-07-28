@@ -3,14 +3,16 @@ package communicator
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/veritasvpn/lib/logging"
+	"github.com/veritasvpn/services/wg-manager/internal/hub"
 	"github.com/veritasvpn/services/wg-manager/internal/model"
 )
 
 type AgentClient interface {
-	PushPeerUpdate(ctx context.Context, serverAddr string, action string, peerID string, publicKey string, presharedKey string, allowedIPs []string) error
+	PushPeerUpdate(ctx context.Context, serverID string, action string, peerID string, publicKey string, presharedKey string, allowedIPs []string) error
 }
 
 type Communicator struct {
@@ -25,31 +27,31 @@ func New(client AgentClient, log *logging.Logger) *Communicator {
 	}
 }
 
-func (c *Communicator) PushPeerAdded(ctx context.Context, serverAddr string, peer *model.Peer) error {
+func (c *Communicator) PushPeerAdded(ctx context.Context, serverID string, peer *model.Peer) error {
 	psk := ""
 	if peer.PresharedKey != nil {
 		psk = *peer.PresharedKey
 	}
-	return c.pushWithBackoff(ctx, serverAddr, "add", peer.ID, peer.Pubkey, psk, peer.AllowedIPs)
+	return c.pushWithBackoff(ctx, serverID, "ADD", peer.ID, peer.Pubkey, psk, peer.AllowedIPs)
 }
 
-func (c *Communicator) PushPeerRemoved(ctx context.Context, serverAddr string, peerID string) error {
-	return c.pushWithBackoff(ctx, serverAddr, "remove", peerID, "", "", nil)
+func (c *Communicator) PushPeerRemoved(ctx context.Context, serverID string, peer *model.Peer) error {
+	return c.pushWithBackoff(ctx, serverID, "REMOVE", peer.ID, peer.Pubkey, "", nil)
 }
 
-func (c *Communicator) pushWithBackoff(ctx context.Context, serverAddr, action, peerID, pubkey, psk string, allowedIPs []string) error {
+func (c *Communicator) pushWithBackoff(ctx context.Context, serverID, action, peerID, pubkey, psk string, allowedIPs []string) error {
 	maxRetries := 3
 	baseDelay := 200 * time.Millisecond
 
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		err := c.client.PushPeerUpdate(callCtx, serverAddr, action, peerID, pubkey, psk, allowedIPs)
+		err := c.client.PushPeerUpdate(callCtx, serverID, action, peerID, pubkey, psk, allowedIPs)
 		cancel()
 
 		if err == nil {
 			c.log.Info("peer update pushed to agent",
-				"server", serverAddr,
+				"server_id", serverID,
 				"action", action,
 				"attempt", i+1,
 			)
@@ -59,7 +61,7 @@ func (c *Communicator) pushWithBackoff(ctx context.Context, serverAddr, action, 
 		lastErr = err
 		c.log.Warn("agent push failed, retrying",
 			"attempt", i+1,
-			"server", serverAddr,
+			"server_id", serverID,
 			"action", action,
 			"error", err.Error(),
 		)
@@ -75,26 +77,31 @@ func (c *Communicator) pushWithBackoff(ctx context.Context, serverAddr, action, 
 	}
 
 	c.log.Error("agent push failed after all retries",
-		"server", serverAddr,
+		"server_id", serverID,
 		"action", action,
 		"error", lastErr,
 	)
 	return lastErr
 }
 
-type LoggingAgentClient struct {
+// SSEAgentClient publishes peer updates to connected agents via the SSE hub.
+type SSEAgentClient struct {
+	hub *hub.Hub
 	log *logging.Logger
 }
 
-func NewLoggingAgentClient(log *logging.Logger) AgentClient {
-	return &LoggingAgentClient{log: log}
+func NewSSEAgentClient(h *hub.Hub, log *logging.Logger) AgentClient {
+	return &SSEAgentClient{hub: h, log: log}
 }
 
-func (l *LoggingAgentClient) PushPeerUpdate(ctx context.Context, serverAddr string, action string, peerID string, publicKey string, presharedKey string, allowedIPs []string) error {
-	l.log.Info("pushing peer update to agent (logging client)",
-		"server", serverAddr,
-		"action", action,
-		"peer_id", peerID,
-	)
+func (s *SSEAgentClient) PushPeerUpdate(ctx context.Context, serverID string, action string, peerID string, publicKey string, presharedKey string, allowedIPs []string) error {
+	_ = ctx
+	s.hub.Publish(serverID, hub.PeerUpdate{
+		Action:       strings.ToUpper(action),
+		PeerID:       peerID,
+		PublicKey:    publicKey,
+		PresharedKey: presharedKey,
+		AllowedIPs:   allowedIPs,
+	})
 	return nil
 }

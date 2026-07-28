@@ -3,14 +3,20 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
-const apiBaseURL = "https://api.veritasvpn.com/api/v1"
+func apiBase() string {
+	if v := os.Getenv("VERITAS_API_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return "https://veritasvpn.cloud/api/v1"
+}
 
 var client = &http.Client{Timeout: 15 * time.Second}
 
@@ -49,21 +55,49 @@ Usage:
   veritas register                    Register a new account
   veritas status                      Show connection status
   veritas servers                     List available servers
-  veritas connect [--region <region>] Connect to VPN (default: auto-select)
-  veritas disconnect                  Disconnect from VPN
+  veritas connect [--region <region>] Connect via WireGuard
+  veritas disconnect                  Disconnect WireGuard
   veritas account                     Show account details
   veritas help                        Show this help
 
 Environment variables:
-  VERITAS_ACCOUNT_ID   Your account ID
+  VERITAS_ACCOUNT_ID    Your account ID
   VERITAS_ACCESS_TOKEN  Your access token
-  VERITAS_API_URL       API base URL (default: https://api.veritasvpn.com)
+  VERITAS_API_URL       API base URL (default: https://veritasvpn.cloud/api/v1)
 `)
+}
+
+func configDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".veritasvpn")
+}
+
+func confPath() string {
+	return filepath.Join(configDir(), "veritas.conf")
+}
+
+func peerIDPath() string {
+	return filepath.Join(configDir(), "peer_id")
+}
+
+func generateWGKeys() (priv, pub string, err error) {
+	out, err := exec.Command("wg", "genkey").Output()
+	if err != nil {
+		return "", "", fmt.Errorf("wg genkey (install wireguard-tools): %w", err)
+	}
+	priv = strings.TrimSpace(string(out))
+	cmd := exec.Command("wg", "pubkey")
+	cmd.Stdin = strings.NewReader(priv)
+	out, err = cmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("wg pubkey: %w", err)
+	}
+	pub = strings.TrimSpace(string(out))
+	return priv, pub, nil
 }
 
 func cmdRegister() {
 	fmt.Println("Registering new account...")
-	fmt.Println("No email required. Save your account ID and token.")
 
 	resp, err := apiPost("/auth/register", map[string]string{})
 	if err != nil {
@@ -76,8 +110,13 @@ func cmdRegister() {
 		AccountID    string `json:"account_id"`
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
+		Error        string `json:"error"`
 	}
 	json.NewDecoder(resp.Body).Decode(&result)
+	if result.AccountID == "" {
+		fmt.Fprintf(os.Stderr, "registration failed: %s\n", result.Error)
+		os.Exit(1)
+	}
 
 	fmt.Printf("\nIMPORTANT — Save these credentials:\n")
 	fmt.Printf("Account ID:    %s\n", result.AccountID)
@@ -89,7 +128,8 @@ func cmdRegister() {
 }
 
 func cmdListServers() {
-	resp, err := apiGet("/servers")
+	accessToken := os.Getenv("VERITAS_ACCESS_TOKEN")
+	resp, err := apiGetWithAuth("/wg/servers", accessToken)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to list servers: %v\n", err)
 		os.Exit(1)
@@ -98,7 +138,6 @@ func cmdListServers() {
 
 	var result struct {
 		Servers []struct {
-			ID         string  `json:"id"`
 			Hostname   string  `json:"hostname"`
 			Region     string  `json:"region"`
 			City       string  `json:"city"`
@@ -125,21 +164,21 @@ func cmdConnect() {
 		}
 	}
 
-	fmt.Printf("Connecting...")
-	if region != "" {
-		fmt.Printf(" (region: %s)", region)
-	}
-	fmt.Println()
-
-	accountID := os.Getenv("VERITAS_ACCOUNT_ID")
 	accessToken := os.Getenv("VERITAS_ACCESS_TOKEN")
-	if accountID == "" || accessToken == "" {
-		fmt.Fprintf(os.Stderr, "set VERITAS_ACCOUNT_ID and VERITAS_ACCESS_TOKEN\n")
+	if accessToken == "" {
+		fmt.Fprintf(os.Stderr, "set VERITAS_ACCESS_TOKEN\n")
+		os.Exit(1)
+	}
+
+	priv, pub, err := generateWGKeys()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
 	body, _ := json.Marshal(map[string]string{
-		"region": region,
+		"public_key": pub,
+		"region":     region,
 	})
 
 	resp, err := apiPostWithAuth("/wg/peers", body, accessToken)
@@ -150,22 +189,36 @@ func cmdConnect() {
 	defer resp.Body.Close()
 
 	var result struct {
-		PeerID         string   `json:"peer_id"`
-		ServerHostname string   `json:"server_hostname"`
-		ServerEndpoint string   `json:"server_endpoint"`
-		ServerPubkey   string   `json:"server_public_key"`
-		AssignedIP     string   `json:"assigned_ip"`
-		DNSServer      string   `json:"dns_server"`
-		AllowedIPs     []string `json:"allowed_ips"`
+		PeerID           string   `json:"peer_id"`
+		ServerHostname   string   `json:"server_hostname"`
+		ServerEndpoint   string   `json:"server_endpoint"`
+		ServerPubkey     string   `json:"server_public_key"`
+		AssignedIP       string   `json:"assigned_ip"`
+		DNSServer        string   `json:"dns_server"`
+		AllowedIPs       []string `json:"allowed_ips"`
+		ClientAllowedIPs []string `json:"client_allowed_ips"`
+		Error            string   `json:"error"`
 	}
 	json.NewDecoder(resp.Body).Decode(&result)
+	if result.PeerID == "" {
+		fmt.Fprintf(os.Stderr, "connect failed: %s\n", result.Error)
+		os.Exit(1)
+	}
 
-	fmt.Printf("\nConnected to %s (%s)\n", result.ServerHostname, result.ServerEndpoint)
-	fmt.Printf("Assigned IP: %s\n", result.AssignedIP)
-	fmt.Printf("DNS: %s\n", result.DNSServer)
+	allowed := result.ClientAllowedIPs
+	if len(allowed) == 0 {
+		allowed = result.AllowedIPs
+	}
+	if len(allowed) == 0 {
+		allowed = []string{"0.0.0.0/0", "::/0"}
+	}
+	dns := result.DNSServer
+	if dns == "" {
+		dns = "1.1.1.1"
+	}
 
 	config := fmt.Sprintf(`[Interface]
-PrivateKey = <YOUR_PRIVATE_KEY>
+PrivateKey = %s
 Address = %s
 DNS = %s
 
@@ -174,27 +227,57 @@ PublicKey = %s
 AllowedIPs = %s
 Endpoint = %s
 PersistentKeepalive = 25
-`, result.AssignedIP, result.DNSServer, result.ServerPubkey,
-		strings.Join(result.AllowedIPs, ", "), result.ServerEndpoint)
+`, priv, result.AssignedIP, dns, result.ServerPubkey,
+		strings.Join(allowed, ", "), result.ServerEndpoint)
 
-	configPath := os.Getenv("HOME") + "/.veritasvpn/wg.conf"
-	os.MkdirAll(os.Getenv("HOME")+"/.veritasvpn", 0700)
-	os.WriteFile(configPath, []byte(config), 0600)
+	_ = os.MkdirAll(configDir(), 0700)
+	_ = os.WriteFile(confPath(), []byte(config), 0600)
+	_ = os.WriteFile(peerIDPath(), []byte(result.PeerID), 0600)
 
-	fmt.Printf("\nConfig saved to %s\n", configPath)
-	fmt.Println("Run: wg-quick up ~/.veritasvpn/wg.conf")
+	fmt.Printf("Connected to %s (%s)\n", result.ServerHostname, result.ServerEndpoint)
+	fmt.Printf("Assigned IP: %s\n", result.AssignedIP)
+	fmt.Printf("Config: %s\n", confPath())
+
+	if path, err := exec.LookPath("wg-quick"); err == nil {
+		cmd := exec.Command(path, "up", confPath())
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "wg-quick up failed (run manually): %v\n", err)
+		}
+	} else {
+		fmt.Println("Run: wg-quick up ~/.veritasvpn/veritas.conf")
+	}
 }
 
 func cmdDisconnect() {
-	fmt.Println("Disconnecting...")
-	os.Remove(os.Getenv("HOME") + "/.veritasvpn/wg.conf")
-	fmt.Println("Run: wg-quick down ~/.veritasvpn/wg.conf")
+	accessToken := os.Getenv("VERITAS_ACCESS_TOKEN")
+	if data, err := os.ReadFile(peerIDPath()); err == nil && accessToken != "" {
+		peerID := strings.TrimSpace(string(data))
+		req, _ := http.NewRequest("DELETE", apiBase()+"/wg/peers/"+peerID, nil)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}
+
+	if path, err := exec.LookPath("wg-quick"); err == nil {
+		if _, err := os.Stat(confPath()); err == nil {
+			cmd := exec.Command(path, "down", confPath())
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			_ = cmd.Run()
+		}
+	}
+
+	_ = os.Remove(confPath())
+	_ = os.Remove(peerIDPath())
+	fmt.Println("Disconnected")
 }
 
 func cmdStatus() {
-	accountID := os.Getenv("VERITAS_ACCOUNT_ID")
 	accessToken := os.Getenv("VERITAS_ACCESS_TOKEN")
-
 	resp, err := apiGetWithAuth("/wg/peers", accessToken)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "status check failed: %v\n", err)
@@ -204,65 +287,44 @@ func cmdStatus() {
 
 	var result struct {
 		Peers []struct {
-			PeerID         string `json:"peer_id"`
-			ServerHostname string `json:"server_hostname"`
-			AssignedIP     string `json:"assigned_ip"`
-			Status         string `json:"status"`
+			ID         string `json:"id"`
+			AssignedIP string `json:"assigned_ip"`
+			Status     string `json:"status"`
 		} `json:"peers"`
 	}
 	json.NewDecoder(resp.Body).Decode(&result)
 
-	_ = accountID
 	fmt.Printf("Active peers: %d\n", len(result.Peers))
 	for _, p := range result.Peers {
-		fmt.Printf("  %s → %s (IP: %s, status: %s)\n",
-			p.PeerID, p.ServerHostname, p.AssignedIP, p.Status)
+		fmt.Printf("  %s (IP: %s, status: %s)\n", p.ID, p.AssignedIP, p.Status)
 	}
 }
 
 func cmdAccount() {
-	accountID := os.Getenv("VERITAS_ACCOUNT_ID")
 	accessToken := os.Getenv("VERITAS_ACCESS_TOKEN")
-
-	resp, err := apiGetWithAuth("/auth/account?account_id="+accountID, accessToken)
+	resp, err := apiGetWithAuth("/auth/me", accessToken)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "account lookup failed: %v\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 
-	var result struct {
-		AccountID          string `json:"account_id"`
-		Tier               string `json:"tier"`
-		Status             string `json:"status"`
-		SubscriptionExpiry int64  `json:"subscription_expiry,omitempty"`
-	}
+	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
-
-	fmt.Printf("Account ID: %s\n", result.AccountID)
-	fmt.Printf("Tier:       %s\n", result.Tier)
-	fmt.Printf("Status:     %s\n", result.Status)
-	if result.SubscriptionExpiry > 0 {
-		exp := time.Unix(result.SubscriptionExpiry, 0)
-		fmt.Printf("Expires:    %s\n", exp.Format(time.RFC3339))
-	}
-}
-
-func apiGet(path string) (*http.Response, error) {
-	url := apiBaseURL + path
-	req, _ := http.NewRequest("GET", url, nil)
-	return client.Do(req)
+	fmt.Printf("Account: %v\n", result)
 }
 
 func apiGetWithAuth(path, token string) (*http.Response, error) {
-	url := apiBaseURL + path
+	url := apiBase() + path
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	return client.Do(req)
 }
 
 func apiPost(path string, body interface{}) (*http.Response, error) {
-	url := apiBaseURL + path
+	url := apiBase() + path
 	jsonBody, _ := json.Marshal(body)
 	req, _ := http.NewRequest("POST", url, strings.NewReader(string(jsonBody)))
 	req.Header.Set("Content-Type", "application/json")
@@ -270,7 +332,7 @@ func apiPost(path string, body interface{}) (*http.Response, error) {
 }
 
 func apiPostWithAuth(path string, body []byte, token string) (*http.Response, error) {
-	url := apiBaseURL + path
+	url := apiBase() + path
 	req, _ := http.NewRequest("POST", url, strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)

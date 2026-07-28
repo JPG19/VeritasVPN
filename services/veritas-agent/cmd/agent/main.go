@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -21,7 +22,6 @@ import (
 	"go.uber.org/zap"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
-	"github.com/veritasvpn/lib/config"
 	"github.com/veritasvpn/lib/logging"
 	"github.com/veritasvpn/services/veritas-agent/internal/firewall"
 	"github.com/veritasvpn/services/veritas-agent/internal/metrics"
@@ -80,6 +80,13 @@ func NewAgentClient(endpoint string) *httpAgentClient {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+	}
+}
+
+func (c *httpAgentClient) streamClient() *http.Client {
+	return &http.Client{
+		// SSE streams must not use a request timeout.
+		Timeout: 0,
 	}
 }
 
@@ -155,7 +162,7 @@ func (c *httpAgentClient) StreamPeerUpdates(ctx context.Context, serverID, authT
 		httpReq.Header.Set("Accept", "text/event-stream")
 		httpReq.Header.Set("Authorization", "Bearer "+authToken)
 
-		resp, err := c.httpClient.Do(httpReq)
+		resp, err := c.streamClient().Do(httpReq)
 		if err != nil {
 			errCh <- err
 			return
@@ -279,11 +286,19 @@ func (a *Agent) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	publicKey, err := a.getServerKey()
+	privKey, publicKey, err := a.getServerKey()
 	if err != nil {
 		return fmt.Errorf("server key: %w", err)
 	}
 	a.publicKey = publicKey
+
+	serverAddr := "10.0.0.1/24"
+	if a.cfg.WGSubnet != "" {
+		serverAddr = strings.Replace(a.cfg.WGSubnet, ".0/24", ".1/24", 1)
+	}
+	if err := a.wgManager.EnsureInterface(privKey, a.cfg.WGPort, serverAddr); err != nil {
+		return fmt.Errorf("ensure wireguard interface: %w", err)
+	}
 
 	if err := a.setupFirewall(); err != nil {
 		return fmt.Errorf("firewall setup: %w", err)
@@ -298,6 +313,10 @@ func (a *Agent) Run() error {
 	a.serverID = resp.ServerID
 	if resp.WGSubnet != "" {
 		a.cfg.WGSubnet = resp.WGSubnet
+		addr := strings.Replace(resp.WGSubnet, ".0/24", ".1/24", 1)
+		if err := a.wgManager.EnsureInterface(privKey, a.cfg.WGPort, addr); err != nil {
+			a.logger.Warn("failed to apply registered subnet address", zap.Error(err))
+		}
 	}
 
 	a.logger.Info("Registered with wg-manager",
@@ -340,7 +359,7 @@ func (a *Agent) Run() error {
 	return nil
 }
 
-func (a *Agent) getServerKey() (string, error) {
+func (a *Agent) getServerKey() (wgtypes.Key, string, error) {
 	keyPath := "/etc/wireguard/private.key"
 	if kf := os.Getenv("WG_PRIVATE_KEY_FILE"); kf != "" {
 		keyPath = kf
@@ -350,7 +369,7 @@ func (a *Agent) getServerKey() (string, error) {
 	if err == nil {
 		key, err := wgtypes.ParseKey(strings.TrimSpace(string(data)))
 		if err == nil {
-			return key.PublicKey().String(), nil
+			return key, key.PublicKey().String(), nil
 		}
 		a.logger.Warn("Existing private key unparseable, generating new one",
 			zap.String("path", keyPath))
@@ -358,7 +377,7 @@ func (a *Agent) getServerKey() (string, error) {
 
 	privKey, err := wgtypes.GeneratePrivateKey()
 	if err != nil {
-		return "", fmt.Errorf("generate wg key: %w", err)
+		return wgtypes.Key{}, "", fmt.Errorf("generate wg key: %w", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(keyPath), 0700); err != nil {
@@ -370,10 +389,17 @@ func (a *Agent) getServerKey() (string, error) {
 			zap.String("path", keyPath), zap.Error(err))
 	}
 
-	return privKey.PublicKey().String(), nil
+	return privKey, privKey.PublicKey().String(), nil
 }
 
 func (a *Agent) setupFirewall() error {
+	if err := enableIPForward(); err != nil {
+		a.logger.Warn("ip_forward enable failed (non-fatal)", zap.Error(err))
+	}
+	if err := ensureMasquerade(a.cfg.WGSubnet, a.cfg.WGInterface); err != nil {
+		a.logger.Warn("iptables MASQUERADE failed (non-fatal)", zap.Error(err))
+	}
+
 	if err := a.fwManager.SetupNAT(a.cfg.WGInterface); err != nil {
 		a.logger.Warn("NAT setup failed (non-fatal)", zap.Error(err))
 	}
@@ -385,6 +411,33 @@ func (a *Agent) setupFirewall() error {
 		zap.String("interface", a.cfg.WGInterface),
 		zap.Int("port", a.cfg.WGPort))
 	return nil
+}
+
+func enableIPForward() error {
+	return os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
+}
+
+func ensureMasquerade(subnet, wgIface string) error {
+	if subnet == "" {
+		subnet = "10.0.0.0/24"
+	}
+	egress := os.Getenv("EGRESS_IFACE")
+	if egress == "" {
+		out, err := exec.Command("sh", "-c", "ip route show default | awk '{print $5; exit}'").Output()
+		if err != nil {
+			return err
+		}
+		egress = strings.TrimSpace(string(out))
+	}
+	if egress == "" {
+		return fmt.Errorf("no egress iface")
+	}
+	_ = wgIface
+	check := exec.Command("iptables", "-t", "nat", "-C", "POSTROUTING", "-s", subnet, "-o", egress, "-j", "MASQUERADE")
+	if check.Run() == nil {
+		return nil
+	}
+	return exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", subnet, "-o", egress, "-j", "MASQUERADE").Run()
 }
 
 func (a *Agent) registerWithManager(ctx context.Context) (*RegisterServerResponse, error) {
@@ -561,8 +614,6 @@ func main() {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
 	defer logger.Sync()
-
-	_ = config.Load()
 
 	agent, err := NewAgent(cfg, logger)
 	if err != nil {
