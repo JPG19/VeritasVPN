@@ -49,6 +49,7 @@ services:
       LOG_LEVEL: debug
       LOG_FORMAT: console
       ENVIRONMENT: development
+      CORS_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,7 +90,7 @@ services:
     environment:
       DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
       NATS_URL: nats://nats:4222
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: dev-secret-change-in-production-use-64-char-random-string
       AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:-dev-agent-token}
       BTCPAY_SERVER_URL: ${BTCPAY_SERVER_URL:-http://host.docker.internal:49392}
       BTCPAY_API_KEY: ${BTCPAY_API_KEY:-}
@@ -98,7 +99,6 @@ services:
       BTCPAY_PUBLIC_URL: ${BTCPAY_PUBLIC_URL:-}
       PREMIUM_PRICE_USD_CENTS: ${PREMIUM_PRICE_USD_CENTS:-500}
       PREMIUM_PERIOD_DAYS: ${PREMIUM_PERIOD_DAYS:-30}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-veritasvpn-37cf6}
       CHECKOUT_SUCCESS_URL: ${CHECKOUT_SUCCESS_URL:-http://localhost:8000/billing/success.html}
       CHECKOUT_CANCEL_URL: ${CHECKOUT_CANCEL_URL:-http://localhost:8000/billing/cancel.html}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}

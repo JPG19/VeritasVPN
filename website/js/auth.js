@@ -1,26 +1,162 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
-import {
-  getAuth,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
-  signOut,
-  sendPasswordResetEmail,
-} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
-import { firebaseConfig } from './firebase-config.js';
+import { AUTH_API } from './config.js';
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
+const STORAGE_KEYS = {
+  user: 'veritas_user',
+  accessToken: 'veritas_access_token',
+  refreshToken: 'veritas_refresh_token',
+};
 
 export const ACCOUNT_PATH = '/account/';
 
+let currentUser = null;
+let listeners = [];
+let authReady = false;
+
+export function isLoggedIn() {
+  return Boolean(getAccessToken());
+}
+
+function getAccessToken() {
+  return localStorage.getItem(STORAGE_KEYS.accessToken);
+}
+
+function getRefreshToken() {
+  return localStorage.getItem(STORAGE_KEYS.refreshToken);
+}
+
+function setSession(user, accessToken, refreshToken) {
+  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
+  localStorage.setItem(STORAGE_KEYS.accessToken, accessToken);
+  localStorage.setItem(STORAGE_KEYS.refreshToken, refreshToken);
+  currentUser = user;
+}
+
+function clearSession() {
+  localStorage.removeItem(STORAGE_KEYS.user);
+  localStorage.removeItem(STORAGE_KEYS.accessToken);
+  localStorage.removeItem(STORAGE_KEYS.refreshToken);
+  currentUser = null;
+}
+
+function restoreSession() {
+  const raw = localStorage.getItem(STORAGE_KEYS.user);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function api(path, options = {}) {
+  const url = `${AUTH_API}${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+async function apiWithAuth(path, options = {}) {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Not signed in');
+  }
+  try {
+    return await api(path, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  } catch (err) {
+    if (err.message.includes('401') || err.message.includes('invalid token')) {
+      const refreshed = await refreshTokenSilently();
+      if (refreshed) {
+        return api(path, {
+          ...options,
+          headers: {
+            ...(options.headers || {}),
+            Authorization: `Bearer ${getAccessToken()}`,
+          },
+        });
+      }
+    }
+    throw err;
+  }
+}
+
+async function refreshTokenSilently() {
+  const rt = getRefreshToken();
+  if (!rt) return false;
+  try {
+    const data = await api('/api/v1/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: rt }),
+    });
+    const user = restoreSession();
+    if (user) {
+      setSession(user, data.access_token, data.refresh_token);
+    }
+    return true;
+  } catch {
+    clearSession();
+    notifyListeners(null);
+    return false;
+  }
+}
+
+function notifyListeners(user) {
+  authReady = true;
+  listeners.forEach((fn) => fn(user));
+}
+
+export function onAuthStateChanged(fn) {
+  listeners.push(fn);
+  if (authReady) {
+    fn(currentUser);
+  } else {
+    const sessionUser = restoreSession();
+    if (sessionUser) {
+      currentUser = sessionUser;
+      fn(sessionUser);
+    }
+  }
+  return () => {
+    listeners = listeners.filter((l) => l !== fn);
+  };
+}
+
 export async function getIdToken() {
-  const user = auth.currentUser;
-  if (!user) return null;
-  return user.getIdToken();
+  let token = getAccessToken();
+  if (!token) return null;
+  const payload = parseJwt(token);
+  if (payload && payload.exp) {
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp - now < 60) {
+      const ok = await refreshTokenSilently();
+      if (!ok) return null;
+      token = getAccessToken();
+    }
+  }
+  return token;
+}
+
+function parseJwt(token) {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(base64));
+  } catch {
+    return null;
+  }
 }
 
 export function goToDashboard(hash = '') {
@@ -29,7 +165,7 @@ export function goToDashboard(hash = '') {
 }
 
 export function requireAuthOrOpenModal(preferredMode = 'signin') {
-  if (auth.currentUser) return true;
+  if (getAccessToken()) return true;
   const btn =
     document.querySelector(`[data-auth-open="${preferredMode}"]`) ||
     document.querySelector('[data-auth-open]');
@@ -37,38 +173,30 @@ export function requireAuthOrOpenModal(preferredMode = 'signin') {
   return false;
 }
 
-function mapAuthError(error) {
-  const code = error?.code || '';
-  switch (code) {
-    case 'auth/invalid-email':
-      return 'Enter a valid email address.';
-    case 'auth/user-disabled':
-      return 'This account has been disabled.';
-    case 'auth/user-not-found':
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-      return 'Incorrect email or password.';
-    case 'auth/email-already-in-use':
-      return 'An account already exists with this email.';
-    case 'auth/weak-password':
-      return 'Password must be at least 6 characters.';
-    case 'auth/operation-not-allowed':
-      return 'This sign-in method is disabled in Firebase. Enable Email/Password (or Google) under Authentication → Sign-in method.';
-    case 'auth/popup-closed-by-user':
-      return 'Sign-in popup was closed before completing.';
-    case 'auth/popup-blocked':
-      return 'Pop-up was blocked. Allow pop-ups for this site and try again.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Please try again later.';
-    case 'auth/network-request-failed':
-      return 'Network error. Check your connection and try again.';
-    default:
-      return error?.message || 'Something went wrong. Please try again.';
+function mapAuthError(message) {
+  const msg = (message || '').toLowerCase();
+  if (msg.includes('email')) return 'Invalid email address.';
+  if (msg.includes('password')) {
+    if (msg.includes('6')) return 'Password must be at least 6 characters.';
+    return 'Incorrect email or password.';
   }
+  if (msg.includes('already exists')) return 'An account already exists with this email.';
+  if (msg.includes('account_id')) return 'Account ID not found.';
+  return message || 'Something went wrong. Please try again.';
+}
+
+async function registerAnonymous() {
+  return api('/api/v1/auth/register-anonymous', { method: 'POST', body: '{}' });
+}
+
+async function signInWithAccount(accountId) {
+  return api('/api/v1/auth/signin-account', {
+    method: 'POST',
+    body: JSON.stringify({ account_id: accountId }),
+  });
 }
 
 function shouldRedirectToDashboardAfterAuth() {
-  // Stay on account app if already there; otherwise enter dashboard after login.
   if (window.location.pathname.startsWith('/account')) return false;
   return true;
 }
@@ -80,6 +208,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   const closeButtons = document.querySelectorAll('[data-auth-close]');
   const tabs = document.querySelectorAll('[data-auth-tab]');
   const form = document.getElementById('authForm');
+  const formFields = document.getElementById('authFormFields');
   const emailInput = document.getElementById('authEmail');
   const passwordInput = document.getElementById('authPassword');
   const submitBtn = document.getElementById('authSubmit');
@@ -88,6 +217,8 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   const errorEl = document.getElementById('authError');
   const titleEl = document.getElementById('authTitle');
   const switchHint = document.getElementById('authSwitchHint');
+  const anonSignupBtn = document.getElementById('authAnonSignup');
+  const anonSigninBtn = document.getElementById('authAnonSignin');
   const loggedOut = document.getElementById('navAuthLoggedOut');
   const loggedIn = document.getElementById('navAuthLoggedIn');
   const userEmailEl = document.getElementById('navUserEmail');
@@ -99,11 +230,14 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   let mode = 'signin';
   let busy = false;
   let pendingDashboardRedirect = false;
-  let authReady = false;
+
+  if (googleBtn) googleBtn.remove();
+
+  let anonCreated = false;
 
   function setError(message, { success = false } = {}) {
     if (!errorEl) return;
-    errorEl.textContent = message || '';
+    errorEl.innerHTML = message || '';
     errorEl.hidden = !message;
     errorEl.classList.toggle('is-success', Boolean(message) && success);
   }
@@ -111,22 +245,85 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   function setMode(next) {
     mode = next;
     const isSignIn = mode === 'signin';
+    const isAnon = mode === 'anon-signup' || mode === 'anon-signin';
+
     tabs.forEach((tab) => {
-      const active = tab.dataset.authTab === mode;
+      const active = tab.dataset.authTab === (isAnon ? (mode === 'anon-signup' ? 'signup' : 'signin') : mode);
       tab.classList.toggle('is-active', active);
       tab.setAttribute('aria-selected', active ? 'true' : 'false');
     });
-    if (titleEl) titleEl.textContent = isSignIn ? 'Sign in' : 'Create account';
-    if (submitBtn) submitBtn.textContent = isSignIn ? 'Sign in' : 'Create account';
-    if (passwordInput) {
-      passwordInput.autocomplete = isSignIn ? 'current-password' : 'new-password';
+
+    if (mode === 'anon-signup') {
+      if (titleEl) titleEl.textContent = 'Anonymous account';
+      if (submitBtn) {
+        submitBtn.textContent = 'Create anonymous account';
+        submitBtn.className = 'btn btn-accent btn-block';
+      }
+      if (formFields) formFields.hidden = true;
+      if (resetBtn) resetBtn.hidden = true;
+      if (switchHint) switchHint.hidden = true;
+      if (anonSignupBtn) anonSignupBtn.hidden = true;
+      if (anonSigninBtn) anonSigninBtn.hidden = true;
+    } else if (mode === 'anon-signin') {
+      if (titleEl) titleEl.textContent = 'Sign in with Account ID';
+      if (submitBtn) {
+        submitBtn.textContent = 'Sign in';
+        submitBtn.className = 'btn btn-accent btn-block';
+      }
+      if (formFields) formFields.hidden = false;
+      if (resetBtn) resetBtn.hidden = true;
+      if (switchHint) switchHint.hidden = true;
+      if (anonSignupBtn) anonSignupBtn.hidden = true;
+      if (anonSigninBtn) anonSigninBtn.hidden = true;
+      const emailLabel = emailInput?.closest('.auth-field');
+      if (emailLabel) {
+        const span = emailLabel.querySelector('span');
+        if (span) span.textContent = 'Account ID';
+      }
+      if (emailInput) {
+        emailInput.type = 'text';
+        emailInput.placeholder = 'e.g. a1b2c3d4e5f6a7b8';
+        emailInput.autocomplete = 'off';
+        emailInput.required = true;
+      }
+      if (passwordInput) {
+        passwordInput.required = false;
+        passwordInput.value = '';
+        const pwLabel = passwordInput.closest('.auth-field');
+        if (pwLabel) pwLabel.style.display = 'none';
+      }
+    } else {
+      if (titleEl) titleEl.textContent = isSignIn ? 'Sign in' : 'Create account';
+      if (submitBtn) {
+        submitBtn.textContent = isSignIn ? 'Sign in' : 'Create account';
+        submitBtn.className = 'btn btn-primary btn-block';
+      }
+      if (formFields) formFields.hidden = false;
+      if (resetBtn) resetBtn.hidden = !isSignIn;
+      if (switchHint) switchHint.hidden = false;
+      if (anonSignupBtn) anonSignupBtn.hidden = isSignIn;
+      if (anonSigninBtn) anonSigninBtn.hidden = !isSignIn;
+
+      const emailLabel = emailInput?.closest('label');
+      if (emailLabel) {
+        const span = emailLabel.querySelector('span');
+        if (span) span.textContent = 'Email';
+      }
+      if (emailInput) {
+        emailInput.type = 'email';
+        emailInput.placeholder = 'you@example.com';
+        emailInput.autocomplete = isSignIn ? 'email' : 'email';
+      }
+      if (passwordInput) {
+        passwordInput.closest('label').hidden = false;
+        passwordInput.autocomplete = isSignIn ? 'current-password' : 'new-password';
+      }
+      if (switchHint) {
+        switchHint.textContent = isSignIn
+          ? "Don't have an account? Sign up"
+          : 'Already have an account? Sign in';
+      }
     }
-    if (switchHint) {
-      switchHint.textContent = isSignIn
-        ? "Don't have an account? Sign up"
-        : 'Already have an account? Sign in';
-    }
-    if (resetBtn) resetBtn.hidden = !isSignIn;
     setError('');
   }
 
@@ -150,7 +347,6 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   function setBusy(next) {
     busy = next;
     if (submitBtn) submitBtn.disabled = busy;
-    if (googleBtn) googleBtn.disabled = busy;
     if (resetBtn) resetBtn.disabled = busy;
   }
 
@@ -160,7 +356,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
 
   function handleGateClick(e, preferredMode = 'signup', hash = '') {
     e.preventDefault();
-    if (auth.currentUser) {
+    if (getAccessToken()) {
       enterDashboard(hash);
       return;
     }
@@ -168,13 +364,22 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
     openModal(preferredMode);
   }
 
-  function renderUser(user) {
+  function updateNavbar(user) {
+  if (user) {
+    loggedOut?.classList.add('is-hidden');
+    loggedIn?.classList.remove('is-hidden');
+    if (userEmailEl) {
+      userEmailEl.textContent = user.email || user.account_id || 'Account';
+    }
+  } else {
+    loggedOut?.classList.remove('is-hidden');
+    loggedIn?.classList.add('is-hidden');
+  }
+}
+
+function renderUser(user) {
     if (user) {
-      loggedOut?.classList.add('is-hidden');
-      loggedIn?.classList.remove('is-hidden');
-      if (userEmailEl) {
-        userEmailEl.textContent = user.email || user.displayName || 'Account';
-      }
+      updateNavbar(user);
       closeModal();
       window.dispatchEvent(new CustomEvent('veritas-auth-changed', { detail: { user } }));
 
@@ -195,11 +400,9 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
     }
   }
 
-  // Also: Log in success from marketing should enter dashboard
   openButtons.forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
-      // Sign-in from marketing should land in dashboard after success
       pendingDashboardRedirect =
         redirectAfterAuth &&
         shouldRedirectToDashboardAfterAuth() &&
@@ -219,7 +422,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   dashboardLinks.forEach((link) => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
-      if (auth.currentUser) {
+      if (getAccessToken()) {
         enterDashboard(link.dataset.dashboardHash || '');
       } else {
         pendingDashboardRedirect = true;
@@ -251,18 +454,91 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   });
 
   tabs.forEach((tab) => {
-    tab.addEventListener('click', () => setMode(tab.dataset.authTab));
+    tab.addEventListener('click', () => {
+      anonCreated = false;
+      if (mode.startsWith('anon-')) {
+        setMode(tab.dataset.authTab === 'signup' ? 'anon-signup' : 'anon-signin');
+      } else {
+        setMode(tab.dataset.authTab);
+      }
+    });
   });
 
   switchHint?.addEventListener('click', (e) => {
     e.preventDefault();
-    setMode(mode === 'signin' ? 'signup' : 'signin');
+    if (mode.startsWith('anon-')) {
+      setMode(mode === 'anon-signin' ? 'anon-signup' : 'anon-signin');
+    } else {
+      setMode(mode === 'signin' ? 'signup' : 'signin');
+    }
+  });
+
+  anonSignupBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    setMode('anon-signup');
+  });
+
+  anonSigninBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    setMode('anon-signin');
   });
 
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (busy) return;
     setError('');
+
+    if (mode === 'anon-signup') {
+      if (anonCreated) {
+        closeModal();
+        enterDashboard();
+        return;
+      }
+      setBusy(true);
+      try {
+        const data = await registerAnonymous();
+        const user = { account_id: data.account_id, is_anonymous: true };
+        setSession(user, data.access_token, data.refresh_token);
+        currentUser = user;
+        updateNavbar(user);
+        anonCreated = true;
+        setMode('anon-signup');
+        setError(`Your account ID: <strong>${data.account_id}</strong><br><br>Copy it now — no way to recover it.`, { success: true });
+        if (submitBtn) {
+          submitBtn.textContent = 'Go to dashboard';
+          submitBtn.className = 'btn btn-primary btn-block';
+        }
+      } catch (err) {
+        setError(mapAuthError(err.message));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (mode === 'anon-signin') {
+      const accountId = emailInput?.value.trim() || '';
+      if (!accountId) {
+        setError('Enter your account ID.');
+        return;
+      }
+      setBusy(true);
+      try {
+        pendingDashboardRedirect = redirectAfterAuth && shouldRedirectToDashboardAfterAuth();
+        const data = await signInWithAccount(accountId);
+        const user = { account_id: data.account_id, is_anonymous: true };
+        setSession(user, data.access_token, data.refresh_token);
+        currentUser = user;
+        renderUser(user);
+      } catch (err) {
+        pendingDashboardRedirect = false;
+        setError(mapAuthError(err.message));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     const email = emailInput?.value.trim() || '';
     const password = passwordInput?.value || '';
     if (!email || !password) {
@@ -272,29 +548,18 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
     setBusy(true);
     try {
       pendingDashboardRedirect = redirectAfterAuth && shouldRedirectToDashboardAfterAuth();
-      if (mode === 'signin') {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        await createUserWithEmailAndPassword(auth, email, password);
-      }
+      const endpoint = mode === 'signin' ? '/api/v1/auth/signin' : '/api/v1/auth/register';
+      const data = await api(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      const user = { email: email, account_id: data.account_id };
+      setSession(user, data.access_token, data.refresh_token);
+      currentUser = user;
+      renderUser(user);
     } catch (err) {
       pendingDashboardRedirect = false;
-      setError(mapAuthError(err));
-    } finally {
-      setBusy(false);
-    }
-  });
-
-  googleBtn?.addEventListener('click', async () => {
-    if (busy) return;
-    setError('');
-    setBusy(true);
-    try {
-      pendingDashboardRedirect = redirectAfterAuth && shouldRedirectToDashboardAfterAuth();
-      await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      pendingDashboardRedirect = false;
-      setError(mapAuthError(err));
+      setError(mapAuthError(err.message));
     } finally {
       setBusy(false);
     }
@@ -305,16 +570,19 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
     if (busy) return;
     const email = emailInput?.value.trim() || '';
     if (!email) {
-      setError('Enter your email above, then click “Forgot password”.');
+      setError('Enter your email above, then click "Forgot password".');
       return;
     }
     setBusy(true);
     setError('');
     try {
-      await sendPasswordResetEmail(auth, email);
-      setError('Password reset email sent. Check your inbox.', { success: true });
+      await api('/api/v1/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      setError('If this email is registered, a password reset link has been sent.', { success: true });
     } catch (err) {
-      setError(mapAuthError(err));
+      setError(mapAuthError(err.message));
     } finally {
       setBusy(false);
     }
@@ -333,17 +601,13 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
 
   signOutBtn?.addEventListener('click', async (e) => {
     e.preventDefault();
-    try {
-      await signOut(auth);
-      if (window.location.pathname.startsWith('/account')) {
-        window.location.href = '/';
-      }
-    } catch (err) {
-      console.error(err);
+    clearSession();
+    renderUser(null);
+    if (window.location.pathname.startsWith('/account')) {
+      window.location.href = '/';
     }
   });
 
-  // Deep link: /?signin=1 or /?signup=1
   const params = new URLSearchParams(window.location.search);
   if (params.get('signin') === '1') {
     openModal('signin');
@@ -351,18 +615,38 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
     openModal('signup');
   }
 
-  onAuthStateChanged(auth, (user) => {
-    authReady = true;
+  const user = restoreSession();
+  if (user) {
+    currentUser = user;
     renderUser(user);
-  });
+  } else {
+    renderUser(null);
+  }
 
   setMode('signin');
 
   return {
     openModal,
     goToDashboard: enterDashboard,
-    isReady: () => authReady,
+    isReady: () => true,
   };
 }
 
-export { signOut, sendPasswordResetEmail, onAuthStateChanged };
+export async function signOutHandler() {
+  clearSession();
+  currentUser = null;
+  notifyListeners(null);
+}
+
+export async function sendPasswordResetEmail(email) {
+  await api('/api/v1/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export const auth = {
+  get currentUser() {
+    return currentUser || restoreSession();
+  },
+};

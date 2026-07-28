@@ -72,7 +72,7 @@ async function refresh() {
 
   authView.hidden = true;
   mainView.hidden = false;
-  userEmail.textContent = session.user.email || session.user.localId;
+  userEmail.textContent = session.user.email || session.user.account_id;
   proxyScheme.value = session.proxy.scheme || 'socks5';
   proxyHost.value = session.proxy.host || '';
   proxyPort.value = session.proxy.port || 1080;

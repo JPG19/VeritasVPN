@@ -115,7 +115,7 @@ func TierFromContext(ctx context.Context) (string, error) {
 	return tier, nil
 }
 
-func ValidateTokenMiddleware(jwt *jwt.Manager, redis *repository.Redis, log *logging.Logger) func(ctx context.Context, token string) (*jwt.Claims, error) {
+func ValidateTokenMiddleware(jwtMgr *jwt.Manager, redis *repository.Redis, log *logging.Logger) func(ctx context.Context, token string) (*jwt.Claims, error) {
 	return func(ctx context.Context, token string) (*jwt.Claims, error) {
 		tokenHash := hashToken(token)
 
@@ -127,7 +127,7 @@ func ValidateTokenMiddleware(jwt *jwt.Manager, redis *repository.Redis, log *log
 			return nil, fmt.Errorf("token revoked")
 		}
 
-		claims, err := jwt.ValidateAccessToken(token)
+		claims, err := jwtMgr.ValidateAccessToken(token)
 		if err != nil {
 			return nil, err
 		}

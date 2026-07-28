@@ -1722,3 +1722,33 @@ body.auth-modal-open {
 .auth-switch:hover {
     color: var(--accent-hover);
 }
+
+.auth-anon-link {
+    display: block;
+    margin: 12px 0 0;
+    padding: 10px 0;
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.auth-anon-link:hover {
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.auth-anon-link[hidden],
+.auth-anon-link.hidden {
+    display: none;
+}
+
+.btn-accent {
+    background: linear-gradient(135deg, #22c55e, #059669);
+    color: #fff;
+}

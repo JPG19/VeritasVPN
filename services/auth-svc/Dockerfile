@@ -4,7 +4,7 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
 
-COPY go.work go.work.sum* ./
+COPY api/ api/
 COPY lib/config/ lib/config/
 COPY lib/logging/ lib/logging/
 COPY lib/crypto/ lib/crypto/
@@ -12,7 +12,7 @@ COPY lib/jwt/ lib/jwt/
 COPY services/auth-svc/ services/auth-svc/
 
 WORKDIR /app/services/auth-svc
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/auth-svc ./cmd/server/
+RUN GOWORK=off go mod tidy && GOWORK=off CGO_ENABLED=0 GOOS=linux go build -o /app/auth-svc ./cmd/server/
 
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates tzdata

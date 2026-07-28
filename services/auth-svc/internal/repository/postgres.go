@@ -18,25 +18,43 @@ func NewPostgres(pool *pgxpool.Pool) *Postgres {
 }
 
 func (p *Postgres) CreateAccount(ctx context.Context, acc *model.Account) error {
-	query := `INSERT INTO accounts (id, hashed_device_id, hashed_public_key, subscription_tier)
-	           VALUES ($1, $2, $3, $4)
+	query := `INSERT INTO accounts (id, hashed_device_id, hashed_public_key, email, password_hash, subscription_tier)
+	           VALUES ($1, $2, $3, $4, $5, $6)
 	           ON CONFLICT (hashed_device_id) DO UPDATE SET hashed_public_key = $3
 	           RETURNING id, created_at, subscription_tier, subscription_expiry, account_status`
 
-	row := p.pool.QueryRow(ctx, query, acc.ID, acc.HashedDeviceID, acc.HashedPublicKey, acc.SubscriptionTier)
+	row := p.pool.QueryRow(ctx, query, acc.ID, acc.HashedDeviceID, acc.HashedPublicKey,
+		acc.Email, acc.PasswordHash, acc.SubscriptionTier)
+
+	return row.Scan(&acc.ID, &acc.CreatedAt, &acc.SubscriptionTier,
+		&acc.SubscriptionExpiry, &acc.AccountStatus)
+}
+
+func (p *Postgres) CreateAccountWithEmail(ctx context.Context, acc *model.Account) error {
+	query := `INSERT INTO accounts (id, hashed_device_id, hashed_public_key, email, password_hash, subscription_tier)
+	           VALUES ($1, $2, $3, $4, $5, $6)
+	           ON CONFLICT (email) DO NOTHING
+	           RETURNING id, created_at, subscription_tier, subscription_expiry, account_status`
+
+	row := p.pool.QueryRow(ctx, query, acc.ID, acc.HashedDeviceID, acc.HashedPublicKey,
+		acc.Email, acc.PasswordHash, acc.SubscriptionTier)
 
 	return row.Scan(&acc.ID, &acc.CreatedAt, &acc.SubscriptionTier,
 		&acc.SubscriptionExpiry, &acc.AccountStatus)
 }
 
 func (p *Postgres) GetAccountByID(ctx context.Context, id string) (*model.Account, error) {
-	query := `SELECT id, hashed_device_id, hashed_public_key, created_at,
+	query := `SELECT id, hashed_device_id, hashed_public_key, email, password_hash,
+	           reset_token, reset_token_expiry, created_at,
 	           subscription_tier, subscription_expiry, account_status
 	           FROM accounts WHERE id = $1 AND account_status != 'deleted'`
 
 	acc := &model.Account{}
 	err := p.pool.QueryRow(ctx, query, id).Scan(
-		&acc.ID, &acc.HashedDeviceID, &acc.HashedPublicKey, &acc.CreatedAt,
+		&acc.ID, &acc.HashedDeviceID, &acc.HashedPublicKey,
+		&acc.Email, &acc.PasswordHash,
+		&acc.ResetToken, &acc.ResetTokenExpiry,
+		&acc.CreatedAt,
 		&acc.SubscriptionTier, &acc.SubscriptionExpiry, &acc.AccountStatus,
 	)
 	if err != nil {
@@ -45,14 +63,70 @@ func (p *Postgres) GetAccountByID(ctx context.Context, id string) (*model.Accoun
 	return acc, nil
 }
 
+func (p *Postgres) GetAccountByEmail(ctx context.Context, email string) (*model.Account, error) {
+	query := `SELECT id, hashed_device_id, hashed_public_key, email, password_hash,
+	           reset_token, reset_token_expiry, created_at,
+	           subscription_tier, subscription_expiry, account_status
+	           FROM accounts WHERE email = $1 AND account_status != 'deleted'`
+
+	acc := &model.Account{}
+	err := p.pool.QueryRow(ctx, query, email).Scan(
+		&acc.ID, &acc.HashedDeviceID, &acc.HashedPublicKey,
+		&acc.Email, &acc.PasswordHash,
+		&acc.ResetToken, &acc.ResetTokenExpiry,
+		&acc.CreatedAt,
+		&acc.SubscriptionTier, &acc.SubscriptionExpiry, &acc.AccountStatus,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get account by email: %w", err)
+	}
+	return acc, nil
+}
+
+func (p *Postgres) UpdateAccountPassword(ctx context.Context, accountID, passwordHash string) error {
+	query := `UPDATE accounts SET password_hash = $2, reset_token = NULL, reset_token_expiry = NULL WHERE id = $1`
+	_, err := p.pool.Exec(ctx, query, accountID, passwordHash)
+	return err
+}
+
+func (p *Postgres) SetResetToken(ctx context.Context, accountID, token string, expiry time.Time) error {
+	query := `UPDATE accounts SET reset_token = $2, reset_token_expiry = $3 WHERE id = $1`
+	_, err := p.pool.Exec(ctx, query, accountID, token, expiry)
+	return err
+}
+
+func (p *Postgres) GetAccountByResetToken(ctx context.Context, token string) (*model.Account, error) {
+	query := `SELECT id, hashed_device_id, hashed_public_key, email, password_hash,
+	           reset_token, reset_token_expiry, created_at,
+	           subscription_tier, subscription_expiry, account_status
+	           FROM accounts WHERE reset_token = $1 AND reset_token_expiry > NOW() AND account_status != 'deleted'`
+
+	acc := &model.Account{}
+	err := p.pool.QueryRow(ctx, query, token).Scan(
+		&acc.ID, &acc.HashedDeviceID, &acc.HashedPublicKey,
+		&acc.Email, &acc.PasswordHash,
+		&acc.ResetToken, &acc.ResetTokenExpiry,
+		&acc.CreatedAt,
+		&acc.SubscriptionTier, &acc.SubscriptionExpiry, &acc.AccountStatus,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get account by reset token: %w", err)
+	}
+	return acc, nil
+}
+
 func (p *Postgres) GetAccountByDeviceID(ctx context.Context, hashedDeviceID string) (*model.Account, error) {
-	query := `SELECT id, hashed_device_id, hashed_public_key, created_at,
+	query := `SELECT id, hashed_device_id, hashed_public_key, email, password_hash,
+	           reset_token, reset_token_expiry, created_at,
 	           subscription_tier, subscription_expiry, account_status
 	           FROM accounts WHERE hashed_device_id = $1 AND account_status != 'deleted'`
 
 	acc := &model.Account{}
 	err := p.pool.QueryRow(ctx, query, hashedDeviceID).Scan(
-		&acc.ID, &acc.HashedDeviceID, &acc.HashedPublicKey, &acc.CreatedAt,
+		&acc.ID, &acc.HashedDeviceID, &acc.HashedPublicKey,
+		&acc.Email, &acc.PasswordHash,
+		&acc.ResetToken, &acc.ResetTokenExpiry,
+		&acc.CreatedAt,
 		&acc.SubscriptionTier, &acc.SubscriptionExpiry, &acc.AccountStatus,
 	)
 	if err != nil {

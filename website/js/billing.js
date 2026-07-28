@@ -1,6 +1,5 @@
-import { auth, getIdToken, requireAuthOrOpenModal } from './auth.js';
-
-const BILLING_API = '';
+import { getIdToken, requireAuthOrOpenModal, auth } from './auth.js';
+import { BILLING_API } from './config.js';
 
 async function api(path, options = {}) {
   const token = await getIdToken();

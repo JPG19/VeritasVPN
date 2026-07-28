@@ -1,0 +1,324 @@
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/veritasvpn/lib/logging"
+	"github.com/veritasvpn/services/auth-svc/internal/service"
+	"go.uber.org/zap"
+)
+
+type HTTPHandler struct {
+	log     *logging.Logger
+	service *service.AuthService
+	corsMap map[string]struct{}
+}
+
+func NewHTTPHandler(log *logging.Logger, svc *service.AuthService, corsOrigins []string) *HTTPHandler {
+	m := make(map[string]struct{}, len(corsOrigins))
+	for _, o := range corsOrigins {
+		m[o] = struct{}{}
+	}
+	return &HTTPHandler{log: log, service: svc, corsMap: m}
+}
+
+func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/healthz", h.handleHealth)
+	mux.HandleFunc("/api/v1/auth/register", h.withCORS(h.handleRegister))
+	mux.HandleFunc("/api/v1/auth/signin", h.withCORS(h.handleSignIn))
+	mux.HandleFunc("/api/v1/auth/refresh", h.withCORS(h.handleRefresh))
+	mux.HandleFunc("/api/v1/auth/validate", h.withCORS(h.handleValidate))
+	mux.HandleFunc("/api/v1/auth/me", h.withCORS(h.handleMe))
+	mux.HandleFunc("/api/v1/auth/reset-password", h.withCORS(h.handleResetPassword))
+	mux.HandleFunc("/api/v1/auth/register-anonymous", h.withCORS(h.handleRegisterAnonymous))
+	mux.HandleFunc("/api/v1/auth/signin-account", h.withCORS(h.handleSignInAccount))
+}
+
+func (h *HTTPHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (h *HTTPHandler) withCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			if _, ok := h.corsMap[origin]; ok {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			}
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (h *HTTPHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeHTTPError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	accessToken, refreshToken, accountID, expiresAt, err := h.service.RegisterWithEmail(r.Context(), req.Email, req.Password)
+	if err != nil {
+		h.log.Error("register failed", zap.Error(err))
+		writeHTTPError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusCreated, map[string]interface{}{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"account_id":    accountID,
+		"expires_at":    expiresAt,
+	})
+}
+
+func (h *HTTPHandler) handleSignIn(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeHTTPError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	accessToken, refreshToken, accountID, expiresAt, err := h.service.SignInWithEmail(r.Context(), req.Email, req.Password)
+	if err != nil {
+		h.log.Warn("sign in failed", zap.String("email", req.Email), zap.Error(err))
+		writeHTTPError(w, http.StatusUnauthorized, "incorrect email or password")
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"account_id":    accountID,
+		"expires_at":    expiresAt,
+		"email":         req.Email,
+	})
+}
+
+func (h *HTTPHandler) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeHTTPError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	accessToken, refreshToken, expiresAt, err := h.service.RefreshToken(r.Context(), req.RefreshToken)
+	if err != nil {
+		h.log.Warn("refresh failed", zap.Error(err))
+		writeHTTPError(w, http.StatusUnauthorized, "invalid refresh token")
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"expires_at":    expiresAt,
+	})
+}
+
+func (h *HTTPHandler) handleValidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	token := extractBearer(r)
+	if token == "" {
+		writeHTTPJSON(w, http.StatusOK, map[string]interface{}{"valid": false})
+		return
+	}
+
+	claims, err := h.service.ValidateToken(r.Context(), token)
+	if err != nil {
+		writeHTTPJSON(w, http.StatusOK, map[string]interface{}{"valid": false})
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusOK, map[string]interface{}{
+		"valid":      true,
+		"account_id": claims.AccountID,
+		"tier":       claims.Tier,
+	})
+}
+
+func (h *HTTPHandler) handleMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	token := extractBearer(r)
+	if token == "" {
+		writeHTTPError(w, http.StatusUnauthorized, "missing authorization token")
+		return
+	}
+
+	claims, err := h.service.ValidateToken(r.Context(), token)
+	if err != nil {
+		writeHTTPError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	acc, err := h.service.GetAccount(r.Context(), claims.AccountID)
+	if err != nil {
+		writeHTTPError(w, http.StatusNotFound, "account not found")
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusOK, map[string]interface{}{
+		"account_id":  acc.ID,
+		"email":       acc.Email,
+		"tier":        acc.SubscriptionTier,
+		"status":      acc.AccountStatus,
+		"created_at":  acc.CreatedAt.Unix(),
+	})
+}
+
+func (h *HTTPHandler) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeHTTPError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.service.RequestPasswordReset(r.Context(), req.Email); err != nil {
+		h.log.Error("password reset request failed", zap.Error(err))
+		writeHTTPError(w, http.StatusInternalServerError, "failed to process request")
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "If an account exists with this email, a reset link has been sent.",
+	})
+}
+
+func (h *HTTPHandler) handleCompleteReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeHTTPError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.service.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
+		writeHTTPError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+}
+
+func (h *HTTPHandler) handleRegisterAnonymous(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	accessToken, refreshToken, accountID, expiresAt, err := h.service.RegisterAnonymous(r.Context())
+	if err != nil {
+		h.log.Error("anonymous register failed", zap.Error(err))
+		writeHTTPError(w, http.StatusInternalServerError, "failed to create account")
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusCreated, map[string]interface{}{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"account_id":    accountID,
+		"expires_at":    expiresAt,
+	})
+}
+
+func (h *HTTPHandler) handleSignInAccount(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		AccountID string `json:"account_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeHTTPError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	accessToken, refreshToken, accountID, expiresAt, err := h.service.SignInWithAccountID(r.Context(), req.AccountID)
+	if err != nil {
+		h.log.Warn("account sign in failed", zap.Error(err))
+		writeHTTPError(w, http.StatusUnauthorized, "invalid account ID")
+		return
+	}
+
+	writeHTTPJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"account_id":    accountID,
+		"expires_at":    expiresAt,
+	})
+}
+
+func extractBearer(r *http.Request) string {
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+}
+
+func writeHTTPJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(data)
+}
+
+func writeHTTPError(w http.ResponseWriter, status int, message string) {
+	writeHTTPJSON(w, status, map[string]string{"error": message})
+}

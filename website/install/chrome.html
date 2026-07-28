@@ -91,13 +91,16 @@
             <h2 id="authTitle" class="auth-title">Sign in</h2>
             <p id="authError" class="auth-error" hidden></p>
             <form id="authForm" class="auth-form" novalidate>
+                <div id="authFormFields">
                 <label class="auth-field"><span>Email</span><input type="email" id="authEmail" required></label>
                 <label class="auth-field"><span>Password</span><input type="password" id="authPassword" required minlength="6"></label>
+                </div>
                 <button type="button" class="auth-reset" id="authReset">Forgot password?</button>
                 <button type="submit" class="btn btn-primary btn-block" id="authSubmit">Sign in</button>
             </form>
+            <button type="button" class="auth-anon-link" id="authAnonSignup">Skip email — create anonymous account</button>
+            <button type="button" class="auth-anon-link" id="authAnonSignin" hidden>Sign in with Account ID instead</button>
             <div class="auth-divider"><span>or</span></div>
-            <button type="button" class="btn btn-outline btn-block auth-google" id="authGoogle">Continue with Google</button>
             <button type="button" class="auth-switch" id="authSwitchHint">Don't have an account? Sign up</button>
         </div>
     </div>

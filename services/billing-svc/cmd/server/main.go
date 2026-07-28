@@ -13,12 +13,12 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/veritasvpn/lib/config"
 	"github.com/veritasvpn/lib/logging"
-	"github.com/veritasvpn/services/billing-svc/internal/firebaseauth"
 	"github.com/veritasvpn/services/billing-svc/internal/handler"
 	"github.com/veritasvpn/services/billing-svc/internal/migrate"
 	"github.com/veritasvpn/services/billing-svc/internal/provider"
 	"github.com/veritasvpn/services/billing-svc/internal/repository"
 	"github.com/veritasvpn/services/billing-svc/internal/service"
+	"github.com/veritasvpn/services/billing-svc/internal/tokenauth"
 	"go.uber.org/zap"
 )
 
@@ -95,8 +95,8 @@ func main() {
 		PremiumPeriodDays:    cfg.PremiumPeriodDays,
 	})
 
-	firebase := firebaseauth.NewVerifier(cfg.FirebaseProjectID)
-	billingHandler := handler.NewBillingHandler(log, svc, firebase, cfg.AllowedCORSOrigins(), cfg.CheckoutSuccessURL)
+	tokenVerifier := tokenauth.NewVerifier(cfg.JWTSecret)
+	billingHandler := handler.NewBillingHandler(log, svc, tokenVerifier, cfg.AllowedCORSOrigins(), cfg.CheckoutSuccessURL)
 
 	mux := http.NewServeMux()
 	billingHandler.RegisterRoutes(mux)
