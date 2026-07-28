@@ -9,20 +9,20 @@ import (
 	"strings"
 
 	"github.com/veritasvpn/lib/logging"
-	"github.com/veritasvpn/services/billing-svc/internal/firebaseauth"
 	"github.com/veritasvpn/services/billing-svc/internal/service"
+	"github.com/veritasvpn/services/billing-svc/internal/tokenauth"
 	"go.uber.org/zap"
 )
 
 type BillingHandler struct {
 	log        *logging.Logger
 	service    *service.BillingService
-	firebase   *firebaseauth.Verifier
+	tokenAuth  *tokenauth.Verifier
 	corsAllow  map[string]struct{}
 	successURL string
 }
 
-func NewBillingHandler(log *logging.Logger, svc *service.BillingService, firebase *firebaseauth.Verifier, corsOrigins []string, successURL string) *BillingHandler {
+func NewBillingHandler(log *logging.Logger, svc *service.BillingService, verifier *tokenauth.Verifier, corsOrigins []string, successURL string) *BillingHandler {
 	allow := make(map[string]struct{}, len(corsOrigins))
 	for _, o := range corsOrigins {
 		allow[o] = struct{}{}
@@ -30,7 +30,7 @@ func NewBillingHandler(log *logging.Logger, svc *service.BillingService, firebas
 	if successURL == "" {
 		successURL = "http://localhost:8000/billing/success.html"
 	}
-	return &BillingHandler{log: log, service: svc, firebase: firebase, corsAllow: allow, successURL: successURL}
+	return &BillingHandler{log: log, service: svc, tokenAuth: verifier, corsAllow: allow, successURL: successURL}
 }
 
 func (h *BillingHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -73,9 +73,9 @@ func (h *BillingHandler) requireUID(w http.ResponseWriter, r *http.Request) (str
 		return "", false
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
-	uid, err := h.firebase.Verify(r.Context(), token)
+	uid, _, err := h.tokenAuth.Verify(r.Context(), token)
 	if err != nil {
-		h.log.Warn("firebase auth failed", zap.Error(err))
+		h.log.Warn("token auth failed", zap.Error(err))
 		writeError(w, http.StatusUnauthorized, "invalid token")
 		return "", false
 	}

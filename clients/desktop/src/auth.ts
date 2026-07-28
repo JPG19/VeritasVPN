@@ -1,55 +1,44 @@
-import { FIREBASE_API_KEY } from "./config";
+import { AUTH_API } from "./config";
 
-interface FirebaseAuthResponse {
-  idToken: string;
-  email: string;
-  refreshToken: string;
-  expiresIn: string;
-  localId: string;
-  registered?: boolean;
+interface AuthResponse {
+  access_token: string;
+  refresh_token: string;
+  account_id: string;
+  expires_at: number;
+  email?: string;
 }
 
-interface FirebaseError {
-  error: {
-    code: number;
-    message: string;
-    errors?: Array<{ message: string }>;
-  };
+interface AuthError {
+  error: string;
 }
 
 const STORAGE_KEYS = {
   user: "veritas_user",
-  idToken: "veritas_id_token",
+  accessToken: "veritas_access_token",
   refreshToken: "veritas_refresh_token",
 };
 
 export interface User {
   email: string;
-  localId: string;
+  account_id: string;
 }
 
-function humanizeError(code: string): string {
-  switch (code) {
-    case "EMAIL_NOT_FOUND":
-    case "INVALID_PASSWORD":
-    case "INVALID_LOGIN_CREDENTIALS":
-      return "Incorrect email or password.";
-    case "USER_DISABLED":
-      return "This account has been disabled.";
-    case "EMAIL_EXISTS":
-      return "An account with this email already exists.";
-    case "TOO_MANY_ATTEMPTS_TRY_LATER":
-      return "Too many attempts. Try again later.";
-    default:
-      return code.replace(/_/g, " ").toLowerCase();
+function humanizeError(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("email")) return "Invalid email address.";
+  if (m.includes("password")) {
+    if (m.includes("6")) return "Password must be at least 6 characters.";
+    return "Incorrect email or password.";
   }
+  if (m.includes("already exists")) return "An account with this email already exists.";
+  return msg;
 }
 
-async function firebaseAuth(
-  endpoint: string,
+async function authAPI(
+  path: string,
   body: Record<string, unknown>
-): Promise<FirebaseAuthResponse> {
-  const url = `https://identitytoolkit.googleapis.com/v1/accounts:${endpoint}?key=${FIREBASE_API_KEY}`;
+): Promise<AuthResponse> {
+  const url = `${AUTH_API}${path}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -57,12 +46,10 @@ async function firebaseAuth(
   });
   const data = await res.json();
   if (!res.ok) {
-    const fbError = data as FirebaseError;
-    const msg =
-      fbError?.error?.message || "Authentication failed";
-    throw new Error(humanizeError(msg));
+    const err = data as AuthError;
+    throw new Error(humanizeError(err?.error || "Authentication failed"));
   }
-  return data as FirebaseAuthResponse;
+  return data as AuthResponse;
 }
 
 export function getStoredUser(): User | null {
@@ -76,22 +63,21 @@ export function getStoredUser(): User | null {
 }
 
 export function getStoredToken(): string | null {
-  return localStorage.getItem(STORAGE_KEYS.idToken);
+  return localStorage.getItem(STORAGE_KEYS.accessToken);
 }
 
 export async function signIn(
   email: string,
   password: string
 ): Promise<User> {
-  const data = await firebaseAuth("signInWithPassword", {
+  const data = await authAPI("/api/v1/auth/signin", {
     email,
     password,
-    returnSecureToken: true,
   });
-  const user: User = { email: data.email, localId: data.localId };
+  const user: User = { email: data.email || email, account_id: data.account_id };
   localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
-  localStorage.setItem(STORAGE_KEYS.idToken, data.idToken);
-  localStorage.setItem(STORAGE_KEYS.refreshToken, data.refreshToken);
+  localStorage.setItem(STORAGE_KEYS.accessToken, data.access_token);
+  localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
   return user;
 }
 
@@ -99,20 +85,19 @@ export async function signUp(
   email: string,
   password: string
 ): Promise<User> {
-  const data = await firebaseAuth("signUp", {
+  const data = await authAPI("/api/v1/auth/register", {
     email,
     password,
-    returnSecureToken: true,
   });
-  const user: User = { email: data.email, localId: data.localId };
+  const user: User = { email: email, account_id: data.account_id };
   localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
-  localStorage.setItem(STORAGE_KEYS.idToken, data.idToken);
-  localStorage.setItem(STORAGE_KEYS.refreshToken, data.refreshToken);
+  localStorage.setItem(STORAGE_KEYS.accessToken, data.access_token);
+  localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
   return user;
 }
 
 export function signOut(): void {
   localStorage.removeItem(STORAGE_KEYS.user);
-  localStorage.removeItem(STORAGE_KEYS.idToken);
+  localStorage.removeItem(STORAGE_KEYS.accessToken);
   localStorage.removeItem(STORAGE_KEYS.refreshToken);
 }

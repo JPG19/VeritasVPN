@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -64,15 +65,34 @@ func main() {
 	authv1.RegisterAuthServiceServer(grpcServer, authHandler)
 	reflection.Register(grpcServer)
 
-	lis, err := net.Listen("tcp", cfg.ServerAddr())
+	lis, err := net.Listen("tcp", cfg.GRPCServerAddr())
 	if err != nil {
-		log.Fatal("failed to listen", zap.Error(err))
+		log.Fatal("failed to listen gRPC", zap.Error(err))
 	}
 
 	go func() {
-		log.Info("auth-svc starting", zap.String("addr", cfg.ServerAddr()))
+		log.Info("auth-svc gRPC starting", zap.String("addr", cfg.GRPCServerAddr()))
 		if err := grpcServer.Serve(lis); err != nil {
 			log.Fatal("gRPC server failed", zap.Error(err))
+		}
+	}()
+
+	httpHandler := handler.NewHTTPHandler(log, svc, cfg.AllowedCORSOrigins())
+	mux := http.NewServeMux()
+	httpHandler.RegisterRoutes(mux)
+
+	httpSrv := &http.Server{
+		Addr:         cfg.ServerAddr(),
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	go func() {
+		log.Info("auth-svc HTTP starting", zap.String("addr", cfg.ServerAddr()))
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("HTTP server failed", zap.Error(err))
 		}
 	}()
 
@@ -82,5 +102,11 @@ func main() {
 
 	log.Info("shutting down auth-svc...")
 	grpcServer.GracefulStop()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		log.Fatal("HTTP server forced to shutdown", zap.Error(err))
+	}
 	log.Info("auth-svc stopped")
 }

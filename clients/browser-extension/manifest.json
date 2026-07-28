@@ -27,11 +27,9 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://*.firebaseapp.com/*",
-    "https://*.googleapis.com/*",
-    "https://identitytoolkit.googleapis.com/*",
-    "https://securetoken.googleapis.com/*",
+    "http://localhost:8080/*",
     "http://localhost:8083/*",
+    "http://127.0.0.1:8080/*",
     "http://127.0.0.1:8083/*"
   ],
   "content_security_policy": {

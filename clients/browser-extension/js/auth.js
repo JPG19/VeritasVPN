@@ -1,12 +1,11 @@
 import {
-  FIREBASE_API_KEY,
-  FIREBASE_AUTH_DOMAIN,
+  AUTH_API,
   DEFAULT_PROXY,
 } from './config.js';
 
 const STORAGE_KEYS = {
   user: 'veritas_user',
-  idToken: 'veritas_id_token',
+  accessToken: 'veritas_access_token',
   refreshToken: 'veritas_refresh_token',
   connected: 'veritas_connected',
   proxy: 'veritas_proxy',
@@ -23,13 +22,13 @@ async function setStorage(obj) {
 export async function getSession() {
   const data = await getStorage([
     STORAGE_KEYS.user,
-    STORAGE_KEYS.idToken,
+    STORAGE_KEYS.accessToken,
     STORAGE_KEYS.connected,
     STORAGE_KEYS.proxy,
   ]);
   return {
     user: data[STORAGE_KEYS.user] || null,
-    idToken: data[STORAGE_KEYS.idToken] || null,
+    idToken: data[STORAGE_KEYS.accessToken] || null,
     connected: Boolean(data[STORAGE_KEYS.connected]),
     proxy: data[STORAGE_KEYS.proxy] || { ...DEFAULT_PROXY },
   };
@@ -38,15 +37,15 @@ export async function getSession() {
 export async function clearSession() {
   await chrome.storage.local.remove([
     STORAGE_KEYS.user,
-    STORAGE_KEYS.idToken,
+    STORAGE_KEYS.accessToken,
     STORAGE_KEYS.refreshToken,
     STORAGE_KEYS.connected,
   ]);
   await clearProxy();
 }
 
-async function firebaseAuth(endpoint, body) {
-  const url = `https://identitytoolkit.googleapis.com/v1/accounts:${endpoint}?key=${FIREBASE_API_KEY}`;
+async function authAPI(endpoint, body) {
+  const url = `${AUTH_API}${endpoint}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -54,53 +53,47 @@ async function firebaseAuth(endpoint, body) {
   });
   const data = await res.json();
   if (!res.ok) {
-    const msg = data?.error?.message || 'Authentication failed';
-    throw new Error(humanizeFirebaseError(msg));
+    const msg = data?.error || 'Authentication failed';
+    throw new Error(humanizeError(msg));
   }
   return data;
 }
 
-function humanizeFirebaseError(code) {
-  switch (code) {
-    case 'EMAIL_NOT_FOUND':
-    case 'INVALID_PASSWORD':
-    case 'INVALID_LOGIN_CREDENTIALS':
-      return 'Incorrect email or password.';
-    case 'USER_DISABLED':
-      return 'This account has been disabled.';
-    case 'TOO_MANY_ATTEMPTS_TRY_LATER':
-      return 'Too many attempts. Try again later.';
-    default:
-      return code.replace(/_/g, ' ').toLowerCase();
+function humanizeError(msg) {
+  const m = msg.toLowerCase();
+  if (m.includes('email')) return 'Invalid email address.';
+  if (m.includes('password')) {
+    if (m.includes('6')) return 'Password must be at least 6 characters.';
+    return 'Incorrect email or password.';
   }
+  if (m.includes('already exists')) return 'An account already exists with this email.';
+  return msg;
 }
 
 export async function signIn(email, password) {
-  const data = await firebaseAuth('signInWithPassword', {
+  const data = await authAPI('/api/v1/auth/signin', {
     email,
     password,
-    returnSecureToken: true,
   });
-  const user = { email: data.email, localId: data.localId };
+  const user = { email: data.email || email, account_id: data.account_id };
   await setStorage({
     [STORAGE_KEYS.user]: user,
-    [STORAGE_KEYS.idToken]: data.idToken,
-    [STORAGE_KEYS.refreshToken]: data.refreshToken,
+    [STORAGE_KEYS.accessToken]: data.access_token,
+    [STORAGE_KEYS.refreshToken]: data.refresh_token,
   });
   return user;
 }
 
 export async function signUp(email, password) {
-  const data = await firebaseAuth('signUp', {
+  const data = await authAPI('/api/v1/auth/register', {
     email,
     password,
-    returnSecureToken: true,
   });
-  const user = { email: data.email, localId: data.localId };
+  const user = { email: email, account_id: data.account_id };
   await setStorage({
     [STORAGE_KEYS.user]: user,
-    [STORAGE_KEYS.idToken]: data.idToken,
-    [STORAGE_KEYS.refreshToken]: data.refreshToken,
+    [STORAGE_KEYS.accessToken]: data.access_token,
+    [STORAGE_KEYS.refreshToken]: data.refresh_token,
   });
   return user;
 }
@@ -129,7 +122,7 @@ export async function connect() {
           host: proxy.host,
           port: Number(proxy.port) || 1080,
         },
-        bypassList: ['localhost', '127.0.0.1', '<local>', FIREBASE_AUTH_DOMAIN],
+        bypassList: ['localhost', '127.0.0.1', '<local>'],
       },
     };
     await chrome.proxy.settings.set({ value: config, scope: 'regular' });

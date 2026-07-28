@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type AuthHandler struct {
@@ -82,8 +81,6 @@ func (h *AuthHandler) GetAccount(ctx context.Context, req *authv1.GetAccountRequ
 	if acc.SubscriptionExpiry != nil {
 		resp.SubscriptionExpiry = acc.SubscriptionExpiry.Unix()
 	}
-
-	_ = timestamppb.Now()
 
 	return resp, nil
 }

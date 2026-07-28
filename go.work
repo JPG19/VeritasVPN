@@ -1,6 +1,7 @@
 go 1.22
 
 use (
+	./api
 	./lib/config
 	./lib/logging
 	./lib/crypto

@@ -1,14 +1,14 @@
 import {
   auth,
   onAuthStateChanged,
-  signOut,
+  signOutHandler,
   sendPasswordResetEmail,
 } from '/js/auth.js';
 import {
   fetchBillingStatus,
   startPremiumCheckout,
   cancelSubscription,
-} from '/js/billing.js?v=2';
+} from '/js/billing.js?v=3';
 
 const content = document.getElementById('accountContent');
 const shell = document.getElementById('accountShell');
@@ -85,7 +85,9 @@ function renderHome() {
           <div class="plan-card-meta">
             ${
               premium
-                ? `Active until ${end || '—'}${billingStatus?.cancel_at_period_end ? ' · Cancels at period end' : ''}`
+                ? `Active until ${end || '—'}${
+                    billingStatus?.cancel_at_period_end ? ' · Cancels at period end' : ''
+                  }`
                 : 'Limited free tier · Upgrade anytime with Bitcoin'
             }
           </div>
@@ -110,7 +112,11 @@ function renderHome() {
       <div class="account-section-header">
         <div>
           <h2>Upgrade your privacy</h2>
-          <p>${premium ? 'You are on Premium. Renew before expiry to stay protected.' : 'One plan. Paid in Bitcoin.'}</p>
+          <p>${
+            premium
+              ? 'You are on Premium. Renew before expiry to stay protected.'
+              : 'One plan. Paid in Bitcoin.'
+          }</p>
         </div>
         <a href="#/subscription">Manage subscription →</a>
       </div>
@@ -222,8 +228,10 @@ function renderAccount(user) {
       <div class="account-card">
         <p class="plan-card-meta">Email</p>
         <div class="plan-card-title" style="font-size:18px;">${user.email || '—'}</div>
-        <p class="plan-card-meta" style="margin-top:12px;">User ID</p>
-        <code style="font-size:12px;color:var(--text-muted);word-break:break-all;">${user.uid}</code>
+        <p class="plan-card-meta" style="margin-top:12px;">Account ID</p>
+        <code style="font-size:12px;color:var(--text-muted);word-break:break-all;">${
+          user.account_id || '—'
+        }</code>
         <div class="account-actions">
           <button type="button" class="btn btn-outline" data-action="reset-password">Send password reset email</button>
           <button type="button" class="btn btn-primary" data-action="signout">Sign out</button>
@@ -306,14 +314,15 @@ async function onAction(action, btn) {
       return;
     }
     if (action === 'reset-password') {
-      if (!auth.currentUser?.email) return;
-      await sendPasswordResetEmail(auth, auth.currentUser.email);
+      const user = auth.currentUser;
+      if (!user?.email) return;
+      await sendPasswordResetEmail(user.email);
       showFlash('Password reset email sent.', 'ok');
       render();
       return;
     }
     if (action === 'signout') {
-      await signOut(auth);
+      await signOutHandler();
       window.location.href = '/';
     }
   } catch (err) {
@@ -334,7 +343,7 @@ upgradeBtn?.addEventListener('click', () => {
 });
 
 signOutBtn?.addEventListener('click', async () => {
-  await signOut(auth);
+  await signOutHandler();
   window.location.href = '/';
 });
 
@@ -348,13 +357,13 @@ document.querySelectorAll('.account-nav-link').forEach((link) => {
 
 window.addEventListener('hashchange', () => render());
 
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(async (user) => {
   if (!user) {
     window.location.replace(`/?signin=1`);
     return;
   }
 
-  emailEl.textContent = user.email || user.uid;
+  emailEl.textContent = user.email || user.account_id;
   boot.hidden = true;
   shell.hidden = false;
 
