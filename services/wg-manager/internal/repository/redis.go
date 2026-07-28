@@ -27,27 +27,26 @@ func (r *Redis) Client() *redis.Client {
 func (r *Redis) AllocateIP(ctx context.Context, serverID, subnet string) (string, error) {
 	bitmapKey := fmt.Sprintf("ip_pool:%s:bitmap", serverID)
 
-	pos, err := r.client.BitField(ctx, bitmapKey, "POS", 0, "u1").Result()
-	if err != nil && !strings.Contains(err.Error(), "ERR unknown command") {
-		return "", fmt.Errorf("bitfield: %w", err)
-	}
-
 	bit, err := r.client.BitPos(ctx, bitmapKey, 0).Result()
 	if err != nil {
 		return "", fmt.Errorf("bitpos: %w", err)
 	}
 	if bit < 0 || bit > 253 {
-		return "", fmt.Errorf("no available IPs in subnet %s", subnet)
+		// Empty bitmap: BitPos returns -1; start at host .2
+		if bit < 0 {
+			bit = 0
+		} else {
+			return "", fmt.Errorf("no available IPs in subnet %s", subnet)
+		}
 	}
 
-	_ = pos
-
 	ip := int(bit) + 2
-	if err := r.client.SetBit(ctx, bitmapKey, int64(ip-2), 1).Err(); err != nil {
+	if err := r.client.SetBit(ctx, bitmapKey, int64(bit), 1).Err(); err != nil {
 		return "", fmt.Errorf("setbit: %w", err)
 	}
 
-	return fmt.Sprintf("%s.%d/32", strings.TrimSuffix(subnet, ".0/24"), ip), nil
+	prefix := strings.TrimSuffix(subnet, ".0/24")
+	return fmt.Sprintf("%s.%d/32", prefix, ip), nil
 }
 
 func (r *Redis) ReleaseIP(ctx context.Context, serverID, ip string) error {

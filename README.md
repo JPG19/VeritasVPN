@@ -1,100 +1,56 @@
 # VeritasVPN
 
-> Privacy is truth. WireGuard-only, open-source, no-logs VPN service.
+> Privacy is truth. WireGuard-only VPN (SOCKS only where WireGuard cannot run, e.g. Chrome).
 
 ## Architecture
 
 ```
-┌─────────────┐  ┌──────────────┐  ┌────────────────────┐
-│ Client Apps │──│ API Gateway  │──│ Auth/Provisioning  │
-│ (Desktop/   │  │ (gRPC/REST) │  │                     │
-│  Mobile/CLI)│  └──────────────┘  └────────────────────┘
-└─────────────┘         │                    │
-       ▲                ▼                    ▼
-       │        ┌──────────────┐  ┌────────────────────┐
-       │        │ WireGuard    │  │ PostgreSQL + Redis │
-       └────────│ Servers      │  │ + NATS             │
-                └──────────────┘  └────────────────────┘
+Desktop / CLI  --WireGuard-->  linux node wg0 (veritas-agent)
+                     ^
+Website / API  -->  nginx --> auth-svc, billing-svc, wg-manager
+                                      |
+                               SSE peer updates --> agent
 ```
 
-## Quick Start
+The **VPN server is the Linux node** (today `linuxDesktop`, later a VPS). Your Mac is a client only.
+
+## Quick Start (VPN node)
 
 ```bash
-make dev-up
+sudo bash deploy/node/bootstrap-wg.sh   # optional if agent brings up wg0 itself
+# set PUBLIC_IP in .env to this host's public IP
+docker compose up -d --build
 ```
 
 Services:
-- **auth-svc** → `:8081` — Account registration, JWT auth
-- **wg-manager** → `:8082` — WireGuard peer and server management
-- **billing-svc** → `:8083` — Subscription and payment processing
-- **PostgreSQL** → `:5432`
-- **Redis** → `:6379`
-- **NATS** → `:4222`
+- **auth-svc** → `:8081`
+- **wg-manager** → `:8082` — peer provisioning + agent API
+- **billing-svc** → `:8083`
+- **veritas-agent** — host WireGuard (`wg0`, UDP `51820`)
+- **veritas-proxy** → `:1080` — SOCKS for Chrome extension only
+- **nginx** → `:8000`
+
+Forward **UDP 51820** on the router for remote clients.
+
+## Desktop
+
+Connect uses WireGuard against the node. If `wg`/`wg-quick` are missing, it falls back to SOCKS.
+
+## CLI
+
+```bash
+export VERITAS_API_URL=https://veritasvpn.cloud/api/v1
+export VERITAS_ACCESS_TOKEN=...
+veritas connect
+veritas disconnect
+```
 
 ## Building
 
 ```bash
-make build-all    # Build all services
-make build-cli    # Build CLI client
-make test         # Run tests
+make build-all
+make test
 ```
-
-## CLI Usage
-
-```bash
-veritas register                # Create anonymous account
-veritas servers                 # List available servers
-veritas connect --region eu     # Connect to VPN
-veritas status                  # Show active connections
-veritas disconnect              # Disconnect
-```
-
-## Project Structure
-
-```
-├── api/proto/       # Protobuf definitions
-├── lib/             # Shared Go libraries
-│   ├── config/      # Config loading from env
-│   ├── logging/     # Structured logging (zap)
-│   ├── crypto/      # Token generation, hashing
-│   └── jwt/         # JWT creation/validation
-├── services/
-│   ├── auth-svc/    # Auth service (gRPC)
-│   ├── wg-manager/  # WireGuard manager (gRPC)
-│   ├── billing-svc/ # Billing service (REST)
-│   └── veritas-agent/ # Per-server agent
-├── clients/
-│   ├── cli/         # CLI client
-│   ├── desktop/     # Tauri 2 + React (planned)
-│   └── mobile/      # Flutter (planned)
-├── infra/
-│   ├── terraform/   # Infrastructure as code
-│   └── ansible/     # Server provisioning
-└── docker-compose.yml
-```
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | Go 1.22+ |
-| Database | PostgreSQL 16 |
-| Cache | Redis 7 |
-| Event Bus | NATS |
-| VPN Protocol | WireGuard |
-| Desktop | Tauri 2 + React (planned) |
-| Mobile | Flutter (planned) |
-| Monitoring | Prometheus + Grafana |
-
-## Website
-
-The marketing/landing page lives in `website/`. Open `website/index.html` in a browser or serve it:
-
-```bash
-cd website && python3 -m http.server 8000
-```
-
-Pricing on the site is **Free** and **Premium ($5/mo, Bitcoin)**. Payment build plan: [`docs/BITCOIN_PAYMENTS_IMPLEMENTATION_PLAN.md`](docs/BITCOIN_PAYMENTS_IMPLEMENTATION_PLAN.md).
 
 ## License
 

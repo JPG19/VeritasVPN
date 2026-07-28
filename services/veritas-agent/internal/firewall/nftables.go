@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -36,9 +37,15 @@ func (m *Manager) ensureChain(chain, spec string) {
 }
 
 func (m *Manager) SetupNAT(iface string) error {
+	// Prefer host bootstrap iptables MASQUERADE (deploy/node/bootstrap-wg.sh).
+	// nft rule kept as best-effort for container-only setups.
+	egress := os.Getenv("EGRESS_IFACE")
+	if egress == "" {
+		return nil
+	}
 	m.ensureTable()
 	m.ensureChain("nat", "{ type nat hook postrouting priority srcnat; }")
-	return m.run("add", "rule", "inet", m.tableName, "nat", "oifname", iface, "masquerade")
+	return m.run("add", "rule", "inet", m.tableName, "nat", "oifname", egress, "masquerade")
 }
 
 func (m *Manager) SetupKillSwitch(wgIface string, wgPort int) error {

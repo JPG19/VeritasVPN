@@ -1,7 +1,8 @@
 -- 001_initial.sql
+-- Applied at runtime via internal/migrate (IF NOT EXISTS). Kept for docker initdb.
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-CREATE TABLE servers (
+CREATE TABLE IF NOT EXISTS servers (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     hostname    TEXT NOT NULL UNIQUE,
     region      TEXT NOT NULL,
@@ -19,10 +20,10 @@ CREATE TABLE servers (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_servers_region ON servers(region);
-CREATE INDEX idx_servers_status ON servers(status);
+CREATE INDEX IF NOT EXISTS idx_servers_region ON servers(region);
+CREATE INDEX IF NOT EXISTS idx_servers_status ON servers(status);
 
-CREATE TABLE peers (
+CREATE TABLE IF NOT EXISTS peers (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id    TEXT NOT NULL,
     server_id     UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
@@ -36,12 +37,12 @@ CREATE TABLE peers (
     UNIQUE(account_id, server_id)
 );
 
-CREATE INDEX idx_peers_account ON peers(account_id);
-CREATE INDEX idx_peers_server ON peers(server_id);
-CREATE INDEX idx_peers_pubkey ON peers(pubkey);
-CREATE INDEX idx_peers_status ON peers(status);
+CREATE INDEX IF NOT EXISTS idx_peers_account ON peers(account_id);
+CREATE INDEX IF NOT EXISTS idx_peers_server ON peers(server_id);
+CREATE INDEX IF NOT EXISTS idx_peers_pubkey ON peers(pubkey);
+CREATE INDEX IF NOT EXISTS idx_peers_status ON peers(status);
 
-CREATE TABLE server_metrics (
+CREATE TABLE IF NOT EXISTS server_metrics (
     id         BIGSERIAL PRIMARY KEY,
     server_id  UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
     timestamp  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -50,6 +51,4 @@ CREATE TABLE server_metrics (
     peer_count INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX idx_server_metrics_server ON server_metrics(server_id, timestamp);
-
-SELECT create_hypertable('server_metrics', 'timestamp', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_server_metrics_server ON server_metrics(server_id, timestamp);

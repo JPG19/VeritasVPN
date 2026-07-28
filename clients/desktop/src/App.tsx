@@ -2,19 +2,39 @@ import { useState, useEffect, FormEvent, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   getStoredUser,
+  getStoredToken,
   signIn as doSignIn,
   signUp as doSignUp,
   signOut as doSignOut,
   type User,
 } from "./auth";
-import { DEFAULT_PROXY } from "./config";
+import { AUTH_API, DEFAULT_PROXY } from "./config";
 import "./App.css";
 
 type AuthMode = "signin" | "signup";
+type TunnelMode = "wireguard" | "socks" | "";
 
 interface ConnectResult {
   success: boolean;
   message: string;
+  mode: string;
+  peer_id: string;
+}
+
+interface KeyPair {
+  private_key: string;
+  public_key: string;
+}
+
+interface PeerResponse {
+  peer_id: string;
+  server_public_key: string;
+  server_endpoint: string;
+  assigned_ip: string;
+  dns_server: string;
+  allowed_ips?: string[];
+  client_allowed_ips?: string[];
+  error?: string;
 }
 
 function App() {
@@ -25,9 +45,10 @@ function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [tunnelMode, setTunnelMode] = useState<TunnelMode>("");
+  const [peerId, setPeerId] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
 
-  // Clear status message after 5 seconds
   useEffect(() => {
     if (!statusMsg) return;
     const t = setTimeout(() => setStatusMsg(""), 5000);
@@ -54,18 +75,73 @@ function App() {
     [email, password, mode]
   );
 
+  const connectSocksFallback = useCallback(async (reason: string) => {
+    const result = await invoke<ConnectResult>("connect_socks", {
+      config: {
+        host: DEFAULT_PROXY.host,
+        port: DEFAULT_PROXY.port,
+      },
+    });
+    if (result.success) {
+      setConnected(true);
+      setTunnelMode("socks");
+      setStatusMsg(`${reason} Using browser-style SOCKS fallback.`);
+    } else {
+      setStatusMsg(result.message || reason);
+    }
+  }, []);
+
   const handleConnect = useCallback(async () => {
     setStatusMsg("");
+    const token = getStoredToken();
+    if (!token) {
+      setStatusMsg("Not signed in");
+      return;
+    }
+
     try {
-      const result = await invoke<ConnectResult>("connect", {
+      const available = await invoke<boolean>("wireguard_available");
+      if (!available) {
+        await connectSocksFallback("VPN engine missing from app bundle.");
+        return;
+      }
+
+      const keys = await invoke<KeyPair>("generate_wg_keys");
+      const res = await fetch(`${AUTH_API}/api/v1/wg/peers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ public_key: keys.public_key }),
+      });
+      const peer = (await res.json()) as PeerResponse;
+      if (!res.ok) {
+        throw new Error(peer.error || "Failed to create WireGuard peer");
+      }
+
+      const allowed =
+        peer.client_allowed_ips ||
+        peer.allowed_ips ||
+        ["0.0.0.0/0", "::/0"];
+
+      const result = await invoke<ConnectResult>("connect_wireguard", {
         config: {
-          host: DEFAULT_PROXY.host,
-          port: DEFAULT_PROXY.port,
+          private_key: keys.private_key,
+          address: peer.assigned_ip,
+          dns: peer.dns_server || "1.1.1.1",
+          server_public_key: peer.server_public_key,
+          endpoint: peer.server_endpoint,
+          allowed_ips: allowed,
+          peer_id: peer.peer_id,
         },
       });
+
       if (result.success) {
         setConnected(true);
-        setStatusMsg("Connected — system proxy set");
+        setTunnelMode("wireguard");
+        setPeerId(peer.peer_id);
+        setStatusMsg("Connected via WireGuard");
       } else {
         setStatusMsg(result.message);
       }
@@ -74,24 +150,34 @@ function App() {
         err instanceof Error ? err.message : "Connection failed"
       );
     }
-  }, []);
+  }, [connectSocksFallback]);
 
   const handleDisconnect = useCallback(async () => {
     setStatusMsg("");
     try {
-      const result = await invoke<ConnectResult>("disconnect");
-      if (result.success) {
-        setConnected(false);
-        setStatusMsg("Disconnected — proxy removed");
-      } else {
-        setStatusMsg(result.message);
+      if (tunnelMode === "wireguard" || peerId) {
+        const token = getStoredToken();
+        if (token && peerId) {
+          await fetch(`${AUTH_API}/api/v1/wg/peers/${peerId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => undefined);
+        }
+        await invoke<ConnectResult>("disconnect_wireguard");
       }
+      if (tunnelMode === "socks") {
+        await invoke<ConnectResult>("disconnect_socks");
+      }
+      setConnected(false);
+      setTunnelMode("");
+      setPeerId("");
+      setStatusMsg("Disconnected");
     } catch (err) {
       setStatusMsg(
         err instanceof Error ? err.message : "Disconnect failed"
       );
     }
-  }, []);
+  }, [tunnelMode, peerId]);
 
   const handleSignOut = useCallback(() => {
     if (connected) {
@@ -159,7 +245,11 @@ function App() {
       </div>
       <div className="status-badge">
         <span className={`dot ${connected ? "on" : "off"}`} />
-        {connected ? "Connected — traffic routed through VeritasVPN" : "Disconnected"}
+        {connected
+          ? tunnelMode === "wireguard"
+            ? "Connected — WireGuard tunnel"
+            : "Connected — SOCKS fallback"
+          : "Disconnected"}
       </div>
       {statusMsg && <div className="status-msg">{statusMsg}</div>}
       {!connected ? (
@@ -175,7 +265,7 @@ function App() {
         Sign out
       </button>
       <p className="footer-note">
-        SOCKS5 via {DEFAULT_PROXY.host}:{DEFAULT_PROXY.port}
+        One-click WireGuard VPN — no extra software to install
       </p>
     </div>
   );
