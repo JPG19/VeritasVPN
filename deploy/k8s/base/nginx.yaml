@@ -123,6 +123,9 @@ spec:
       labels:
         app: nginx
     spec:
+      # Website content is a hostPath on the control-plane node only.
+      nodeSelector:
+        kubernetes.io/arch: amd64
       containers:
         - name: nginx
           image: nginx:1.27-alpine
