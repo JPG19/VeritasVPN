@@ -185,7 +185,14 @@ function App() {
   }, [connectSocksFallback]);
 
   const handleDisconnect = useCallback(async () => {
-    setStatusMsg("");
+    setStatusMsg("Disconnecting…");
+    // Always clear local tunnel UI state so a failed privileged teardown
+    // cannot leave the app stuck showing Connected.
+    const clearUi = () => {
+      setConnected(false);
+      setTunnelMode("");
+      setPeerId("");
+    };
     try {
       if (tunnelMode === "wireguard" || peerId) {
         const token = getStoredToken();
@@ -195,18 +202,26 @@ function App() {
             headers: { Authorization: `Bearer ${token}` },
           }).catch(() => undefined);
         }
-        await invoke<ConnectResult>("disconnect_wireguard");
+        const result = await invoke<ConnectResult>("disconnect_wireguard");
+        clearUi();
+        if (!result.success) {
+          setStatusMsg(
+            result.message ||
+              "Disconnect incomplete — approve the admin prompt, or run: sudo bash ~/Library/Application\\ Support/cloud.veritasvpn.desktop/teardown.sh"
+          );
+          return;
+        }
       }
       if (tunnelMode === "socks") {
         await invoke<ConnectResult>("disconnect_socks");
+        clearUi();
       }
-      setConnected(false);
-      setTunnelMode("");
-      setPeerId("");
+      clearUi();
       setStatusMsg("Disconnected");
     } catch (err) {
+      clearUi();
       setStatusMsg(
-        err instanceof Error ? err.message : "Disconnect failed"
+        err instanceof Error ? err.message : "Disconnect failed — approve the macOS admin prompt"
       );
     }
   }, [tunnelMode, peerId]);

@@ -219,6 +219,7 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
         } else {
             config.dns.trim()
         },
+        &endpoint,
     );
 
     fs::write(&script_path, script).map_err(|e| format!("write script: {e}"))?;
@@ -243,25 +244,54 @@ fn build_bringup_script(
     pid_file: &Path,
     address: &str,
     dns: &str,
+    endpoint: &str,
 ) -> String {
     format!(
         r#"#!/bin/bash
-set -euo pipefail
+set -uo pipefail
 WG_GO='{wg_go}'
 UAPI='{uapi}'
 IFACE_FILE='{iface_file}'
 PID_FILE='{pid_file}'
+META_FILE='{iface_file}.meta'
 ADDR='{address}'
 DNS='{dns}'
+ENDPOINT='{endpoint}'
 
+# --- tear down any previous Veritas tunnel (best-effort) ---
 if [[ -f "$PID_FILE" ]]; then
   kill "$(cat "$PID_FILE")" 2>/dev/null || true
   rm -f "$PID_FILE"
 fi
 if [[ -f "$IFACE_FILE" ]]; then
   OLD="$(cat "$IFACE_FILE")"
+  route -n delete -net 0.0.0.0/1 -interface "$OLD" 2>/dev/null || true
+  route -n delete -net 128.0.0.0/1 -interface "$OLD" 2>/dev/null || true
   ifconfig "$OLD" down 2>/dev/null || true
   rm -f "$IFACE_FILE"
+fi
+# Drop stale split-default routes even if iface file was lost
+route -n delete -net 0.0.0.0/1 2>/dev/null || true
+route -n delete -net 128.0.0.0/1 2>/dev/null || true
+pkill -f '/wireguard-go utun' 2>/dev/null || true
+rm -f /var/run/wireguard/*.sock 2>/dev/null || true
+
+# Capture the REAL default gateway BEFORE we install tunnel routes.
+# Without a host route to the WG endpoint via this gateway, 0.0.0.0/1
+# blackholes WireGuard UDP itself and kills all internet.
+GW="$(route -n get default 2>/dev/null | awk '/gateway: / {{print $2; exit}}')"
+GW_IF="$(route -n get default 2>/dev/null | awk '/interface: / {{print $2; exit}}')"
+ENDPOINT_HOST="${{ENDPOINT%%:*}}"
+ENDPOINT_IP=""
+if [[ -n "$ENDPOINT_HOST" ]]; then
+  if [[ "$ENDPOINT_HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    ENDPOINT_IP="$ENDPOINT_HOST"
+  else
+    ENDPOINT_IP="$(dscacheutil -q host -a name "$ENDPOINT_HOST" 2>/dev/null | awk '/ip_address: /{{print $2; exit}}')"
+    if [[ -z "$ENDPOINT_IP" ]]; then
+      ENDPOINT_IP="$(python3 -c "import socket; print(socket.gethostbyname('$ENDPOINT_HOST'))" 2>/dev/null || true)"
+    fi
+  fi
 fi
 
 "$WG_GO" utun >/tmp/veritas-wg-go.log 2>&1 &
@@ -300,16 +330,44 @@ if "errno=0" not in resp:
     sys.exit(1)
 PY
 
-ifconfig "$IFACE" inet "$ADDR" "$ADDR" alias
+ifconfig "$IFACE" inet "$ADDR" "$ADDR" netmask 255.255.255.255 up
+
+# Keep the VPN server reachable outside the tunnel.
+if [[ -n "$ENDPOINT_IP" && -n "$GW" ]]; then
+  route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
+  route -n add -host "$ENDPOINT_IP" "$GW"
+fi
+
+# Split default (like wg-quick) so we don't replace the system default route entry.
 route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n add -net 0.0.0.0/1 -interface "$IFACE"
 route -n add -net 128.0.0.0/1 -interface "$IFACE"
 
-SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
+# Active network service for DNS (not "first listed").
+SERVICE="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$GW_IF" '
+  /^\(Hardware Port:/ {{
+    name=$0
+    sub(/^\(Hardware Port: /, "", name)
+    sub(/,.*/, "", name)
+  }}
+  /Device: / {{
+    dev=$2
+    sub(/\).*/, "", dev)
+    if (iface != "" && dev == iface) {{ print name; exit }}
+  }}
+')"
+if [[ -z "$SERVICE" ]]; then
+  SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
+fi
 if [[ -z "$SERVICE" ]]; then SERVICE="Wi-Fi"; fi
 networksetup -setdnsservers "$SERVICE" "$DNS" 2>/dev/null || true
-echo "ok iface=$IFACE"
+
+# Persist enough state for a reliable teardown even if the app crashes.
+printf 'endpoint_ip=%s\ngateway=%s\nservice=%s\niface=%s\n' \
+  "$ENDPOINT_IP" "$GW" "$SERVICE" "$IFACE" > "$META_FILE"
+
+echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
 "#,
         wg_go = wg_go.display(),
         uapi = uapi_path.display(),
@@ -317,6 +375,7 @@ echo "ok iface=$IFACE"
         pid_file = pid_file.display(),
         address = address,
         dns = dns,
+        endpoint = endpoint,
     )
 }
 
@@ -324,30 +383,73 @@ fn bring_down_wireguard(_app: &AppHandle) -> Result<String, String> {
     let script_path = state_dir()?.join("teardown.sh");
     let iface_file = iface_path()?;
     let pid_file = pid_path()?;
+    let meta_file = state_dir()?.join("iface.meta");
+    // Never use `set -e` here — partial cleanup must still complete.
     let script = format!(
         r#"#!/bin/bash
-set -euo pipefail
+set -uo pipefail
 IFACE_FILE='{iface_file}'
 PID_FILE='{pid_file}'
-if [[ -f "$IFACE_FILE" ]]; then
+META_FILE='{meta_file}'
+
+ENDPOINT_IP=""
+GW=""
+SERVICE=""
+IFACE=""
+
+if [[ -f "$META_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$META_FILE" 2>/dev/null || true
+  ENDPOINT_IP="${{endpoint_ip:-}}"
+  GW="${{gateway:-}}"
+  SERVICE="${{service:-}}"
+  IFACE="${{iface:-}}"
+fi
+if [[ -z "$IFACE" && -f "$IFACE_FILE" ]]; then
   IFACE="$(cat "$IFACE_FILE")"
+fi
+
+# Remove full-tunnel split routes (by iface and globally).
+if [[ -n "$IFACE" ]]; then
   route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
   route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
   ifconfig "$IFACE" down 2>/dev/null || true
-  rm -f "$IFACE_FILE"
 fi
+route -n delete -net 0.0.0.0/1 2>/dev/null || true
+route -n delete -net 128.0.0.0/1 2>/dev/null || true
+
+# Remove pinned endpoint host route.
+if [[ -n "$ENDPOINT_IP" ]]; then
+  route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
+fi
+
+# Stop userspace WireGuard.
 if [[ -f "$PID_FILE" ]]; then
   kill "$(cat "$PID_FILE")" 2>/dev/null || true
+  sleep 0.2
+  kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
   rm -f "$PID_FILE"
 fi
-SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
+pkill -f '/wireguard-go utun' 2>/dev/null || true
+rm -f /var/run/wireguard/*.sock 2>/dev/null || true
+rm -f "$IFACE_FILE" "$META_FILE"
+
+# Restore DNS on the service we changed, else try common names.
+if [[ -z "$SERVICE" ]]; then
+  SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
+fi
 if [[ -n "$SERVICE" ]]; then
   networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
 fi
+for S in "Wi-Fi" "Ethernet" "Thunderbolt Ethernet" "USB 10/100/1000 LAN"; do
+  networksetup -setdnsservers "$S" Empty 2>/dev/null || true
+done
+
 echo ok
 "#,
         iface_file = iface_file.display(),
         pid_file = pid_file.display(),
+        meta_file = meta_file.display(),
     );
     fs::write(&script_path, script).map_err(|e| format!("write teardown: {e}"))?;
     #[cfg(unix)]
@@ -359,7 +461,16 @@ echo ok
         perms.set_mode(0o700);
         fs::set_permissions(&script_path, perms).ok();
     }
-    run_elevated(&script_path)?;
+    // Prefer elevated teardown; if the user cancels the password prompt, still
+    // try a best-effort non-elevated cleanup so we don't leave them offline.
+    if let Err(elev_err) = run_elevated(&script_path) {
+        let _ = Command::new("bash").arg(&script_path).output();
+        let _ = fs::remove_file(conf_path()?);
+        let _ = fs::remove_file(peer_id_path()?);
+        return Err(format!(
+            "disconnect needs admin rights to fully restore networking: {elev_err}"
+        ));
+    }
     let _ = fs::remove_file(conf_path()?);
     let _ = fs::remove_file(peer_id_path()?);
     Ok("WireGuard disconnected".into())
