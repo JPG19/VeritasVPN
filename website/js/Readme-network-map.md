@@ -13,3 +13,4 @@ entries when nodes actually go online; do not invent locations.
 - Projection: equirectangular on viewBox `0 0 1000 500`
 - Keep marketing copy aligned with this list (single live region until expanded)
 - Land paths are decorative silhouettes, not geographic accuracy
+- Land geometry: `../assets/world-land-path.js` (Natural Earth 110m)
