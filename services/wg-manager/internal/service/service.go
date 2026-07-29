@@ -36,6 +36,7 @@ type Service struct {
 	natsConn     *nats.Conn
 	authToken    string
 	freeRegions  []string
+	tierCache    *entitlement.TierCache
 	log          *logging.Logger
 }
 
@@ -46,6 +47,7 @@ func New(
 	communicator *communicator.Communicator,
 	natsConn *nats.Conn,
 	authToken string,
+	tierCache *entitlement.TierCache,
 	log *logging.Logger,
 ) *Service {
 	return &Service{
@@ -55,6 +57,7 @@ func New(
 		communicator: communicator,
 		natsConn:     natsConn,
 		authToken:    authToken,
+		tierCache:    tierCache,
 		log:          log,
 	}
 }
@@ -63,6 +66,25 @@ func New(
 // (from FREE_ALLOWED_REGIONS). Empty means any online region.
 func (s *Service) SetFreeAllowedRegions(regions []string) {
 	s.freeRegions = regions
+}
+
+func (s *Service) resolveTier(accountID, jwtTier string) string {
+	jwtTier = entitlement.NormalizeTier(jwtTier)
+	if s.tierCache == nil {
+		return jwtTier
+	}
+	cachedTier, ok := s.tierCache.Lookup(accountID)
+	if !ok {
+		return jwtTier
+	}
+	if cachedTier != jwtTier {
+		s.log.Debug("tier resolved from billing cache",
+			"account_id", accountID,
+			"jwt_tier", jwtTier,
+			"cached_tier", cachedTier,
+		)
+	}
+	return cachedTier
 }
 
 func (s *Service) RegisterServer(ctx context.Context, hostname, publicKey, publicIP string, wgPort int32, region, city, country, authToken string) (*model.Server, error) {
@@ -169,7 +191,7 @@ func (s *Service) HandleHeartbeat(ctx context.Context, serverID string, peerCoun
 }
 
 func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, preferredRegion string) (*PeerConfig, error) {
-	tier = entitlement.NormalizeTier(tier)
+	tier = s.resolveTier(accountID, tier)
 
 	existing, err := s.postgres.ListPeersByAccount(ctx, accountID)
 	if err != nil {

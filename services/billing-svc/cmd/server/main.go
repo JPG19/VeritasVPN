@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -33,6 +34,12 @@ func main() {
 
 	if err := cfg.RequireBTCPayProduction(); err != nil {
 		log.Fatal("invalid production billing config", zap.Error(err))
+	}
+
+	if cfg.BTCPayAPIKey != "" && cfg.BTCPayServerURL != "" &&
+		!strings.Contains(cfg.BTCPayServerURL, "btcpay:49392") &&
+		strings.ToLower(os.Getenv("ALLOW_MOCK_BTCPAY")) == "true" {
+		log.Warn("ALLOW_MOCK_BTCPAY=true is set but real BTCPay credentials are present — mock mode will NOT be used")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
