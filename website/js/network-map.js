@@ -77,8 +77,8 @@ export function mountNetworkMap(mount, opts = {}) {
       aria-label="World map showing ${live.length} live VeritasVPN location${live.length === 1 ? '' : 's'}: ${live.map((l) => l.name).join(', ')}">
       <defs>
         <radialGradient id="mapGlow-${variant}" cx="34%" cy="64%" r="28%">
-          <stop offset="0%" stop-color="#3ecf8e" stop-opacity="0.28"/>
-          <stop offset="100%" stop-color="#3ecf8e" stop-opacity="0"/>
+          <stop offset="0%" stop-color="#00d2ff" stop-opacity="0.32"/>
+          <stop offset="100%" stop-color="#0047ff" stop-opacity="0"/>
         </radialGradient>
       </defs>
       <rect class="ocean" width="1000" height="500"/>
