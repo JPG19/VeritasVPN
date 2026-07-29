@@ -35,14 +35,29 @@ data:
         add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;
         add_header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With" always;
 
-        location / {
-            try_files $uri $uri/ $uri.html =404;
-        }
-
         location = /healthz {
             access_log off;
             return 200 "ok\n";
             add_header Content-Type text/plain;
+        }
+
+        location ~* \.(css|js)$ {
+            expires 5m;
+            try_files $uri =404;
+        }
+
+        location ~* \.html$ {
+            expires -1;
+            try_files $uri =404;
+        }
+
+        location = / {
+            expires -1;
+            try_files /index.html =404;
+        }
+
+        location / {
+            try_files $uri $uri/ $uri.html =404;
         }
 
         location /api/v1/auth/ {
