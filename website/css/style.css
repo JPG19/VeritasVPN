@@ -1,23 +1,27 @@
-/* VeritasVPN — South Atlantic night
-   Display: Syne · Body: Figtree
-   Accent: leaf green on deep ink (not purple / cyan-glow / cream-serif) */
+/* VeritasVPN brand palette (matches logo / Figma)
+   Cyan #00D2FF → Royal #0047FF on charcoal #05070A
+   Display: Syne · Body: Figtree */
 
 :root {
-  --ink: #07110f;
-  --ink-2: #0c1a16;
-  --ink-3: #12241f;
-  --panel: #142a24;
-  --line: rgba(232, 224, 212, 0.1);
-  --line-strong: rgba(232, 224, 212, 0.18);
-  --paper: #f2ebe0;
-  --paper-muted: #b8b0a3;
-  --paper-dim: #7d766b;
-  --leaf: #3ecf8e;
-  --leaf-deep: #1f9a62;
-  --leaf-soft: rgba(62, 207, 142, 0.14);
+  --ink: #05070a;
+  --ink-2: #0b1018;
+  --ink-3: #121820;
+  --panel: #0f1520;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --paper: #ffffff;
+  --paper-muted: #9aa8bc;
+  --paper-dim: #6b7a90;
+  --cyan: #00d2ff;
+  --blue: #0047ff;
+  --blue-deep: #002984;
+  /* Legacy token used across the stylesheet */
+  --leaf: var(--cyan);
+  --leaf-deep: var(--blue);
+  --leaf-soft: rgba(0, 210, 255, 0.14);
   --danger: #f0a0a0;
-  --success: #3ecf8e;
-  --success-bg: rgba(62, 207, 142, 0.12);
+  --success: var(--cyan);
+  --success-bg: rgba(0, 210, 255, 0.12);
 
   /* Compat aliases for legal / account / older pages */
   --bg-primary: var(--ink);
@@ -28,14 +32,14 @@
   --text-secondary: var(--paper-muted);
   --text-muted: var(--paper-dim);
   --text-inverse: var(--ink);
-  --accent: var(--leaf);
-  --accent-hover: #6ee7b0;
+  --accent: var(--cyan);
+  --accent-hover: #33dbff;
   --accent-light: var(--leaf-soft);
-  --accent-dark: var(--leaf-deep);
+  --accent-dark: var(--blue);
   --border: var(--line);
   --border-light: var(--line);
-  --gradient-start: var(--leaf);
-  --gradient-end: #2a9b6e;
+  --gradient-start: #00d2ff;
+  --gradient-end: #0047ff;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.45);
@@ -70,10 +74,10 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.35;
+  opacity: 0.4;
   background-image:
-    radial-gradient(ellipse 80% 50% at 70% 10%, rgba(62, 207, 142, 0.09), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 10% 80%, rgba(42, 120, 90, 0.12), transparent 50%),
+    radial-gradient(ellipse 80% 50% at 70% 10%, rgba(0, 210, 255, 0.1), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 15% 85%, rgba(0, 71, 255, 0.12), transparent 50%),
     url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
   background-size: auto, auto, 180px 180px;
 }
@@ -110,11 +114,14 @@ button { font-family: inherit; }
 .btn-lg { padding: 14px 26px; font-size: 15px; }
 .btn-block { width: 100%; }
 .btn-primary {
-  background: var(--leaf);
-  color: var(--ink);
-  border-color: var(--leaf);
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  color: #ffffff;
+  border-color: transparent;
 }
-.btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.btn-primary:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
 .btn-outline {
   background: transparent;
   color: var(--paper);
@@ -154,7 +161,13 @@ button { font-family: inherit; }
   letter-spacing: -0.02em;
 }
 .logo-mark { width: 34px; height: 34px; object-fit: contain; }
-.logo-highlight { color: var(--leaf); }
+.logo-highlight {
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
 .nav-links {
   display: flex;
   align-items: center;
@@ -208,10 +221,10 @@ button { font-family: inherit; }
   border-radius: 4px;
   background: var(--leaf-soft);
   color: var(--leaf);
-  border: 1px solid rgba(62, 207, 142, 0.3);
+  border: 1px solid rgba(0, 210, 255, 0.3);
 }
 .nav-plan-badge.is-premium {
-  background: rgba(62, 207, 142, 0.22);
+  background: rgba(0, 210, 255, 0.22);
   color: var(--paper);
 }
 .nav-auth-logged-in.is-hidden,
@@ -319,7 +332,13 @@ button { font-family: inherit; }
   line-height: 0.95;
   animation: rise-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.hero-brand-name span { color: var(--leaf); }
+.hero-brand-name span {
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
 .hero-title {
   font-size: clamp(1.35rem, 3.2vw, 1.85rem);
   font-weight: 600;
@@ -348,7 +367,7 @@ button { font-family: inherit; }
   animation: rise-in 0.9s 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .hero-meta strong {
-  color: var(--leaf);
+  color: var(--cyan);
   font-weight: 600;
 }
 
@@ -402,7 +421,7 @@ button { font-family: inherit; }
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   background:
-    radial-gradient(ellipse 50% 60% at 35% 55%, rgba(62, 207, 142, 0.08), transparent 60%),
+    radial-gradient(ellipse 50% 60% at 35% 55%, rgba(0, 210, 255, 0.1), transparent 60%),
     var(--ink-2);
   overflow: hidden;
   position: relative;
@@ -430,23 +449,23 @@ button { font-family: inherit; }
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--leaf);
+  color: var(--cyan);
   padding: 8px 12px;
-  border: 1px solid rgba(62, 207, 142, 0.35);
+  border: 1px solid rgba(0, 210, 255, 0.35);
   border-radius: var(--radius-sm);
   background: var(--leaf-soft);
 }
 .network-live-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: var(--leaf);
-  box-shadow: 0 0 0 0 rgba(62, 207, 142, 0.5);
+  background: var(--cyan);
+  box-shadow: 0 0 0 0 rgba(0, 210, 255, 0.5);
   animation: pulse-dot 2s ease-out infinite;
 }
 @keyframes pulse-dot {
-  0% { box-shadow: 0 0 0 0 rgba(62, 207, 142, 0.45); }
-  70% { box-shadow: 0 0 0 10px rgba(62, 207, 142, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(62, 207, 142, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(0, 210, 255, 0.45); }
+  70% { box-shadow: 0 0 0 10px rgba(0, 210, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 210, 255, 0); }
 }
 
 .network-map-wrap {
@@ -459,57 +478,57 @@ button { font-family: inherit; }
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 .network-map .ocean {
-  fill: #0a1c18;
+  fill: #070b12;
 }
 .network-map .land {
-  fill: #3f6b5a;
-  stroke: #5a8f78;
-  stroke-width: 0.4;
+  fill: #1a2a44;
+  stroke: #2a4a72;
+  stroke-width: 0.45;
   stroke-linejoin: round;
 }
 .network-map .grid-line {
-  stroke: rgba(242, 235, 224, 0.07);
+  stroke: rgba(0, 210, 255, 0.08);
   stroke-width: 0.6;
 }
 .network-map .marker-ring {
   fill: none;
-  stroke: #6ee7b0;
+  stroke: #00d2ff;
   stroke-width: 2;
-  opacity: 0.75;
+  opacity: 0.8;
   transform-box: fill-box;
   transform-origin: center;
   animation: ring-expand 2.4s ease-out infinite;
 }
 .network-map .marker-core {
-  fill: #3ecf8e;
-  stroke: #07110f;
+  fill: #00d2ff;
+  stroke: #05070a;
   stroke-width: 1.5;
 }
 .network-map .marker-soon {
-  fill: rgba(242, 235, 224, 0.35);
+  fill: rgba(255, 255, 255, 0.35);
 }
 .network-map .marker-label-bg {
-  fill: rgba(7, 17, 15, 0.82);
-  stroke: rgba(62, 207, 142, 0.35);
+  fill: rgba(5, 7, 10, 0.88);
+  stroke: rgba(0, 210, 255, 0.4);
   stroke-width: 1;
 }
 .network-map .marker-label {
-  fill: #f2ebe0;
+  fill: #ffffff;
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 700;
 }
 .network-map .marker-sub {
-  fill: #9bb5a8;
+  fill: #9aa8bc;
   font-family: var(--font-sans);
   font-size: 9px;
 }
 .network-map--panel .ocean {
-  fill: #0c221c;
+  fill: #080c14;
 }
 .network-map--panel .land {
-  fill: #4a7d69;
-  stroke: #6aa38a;
+  fill: #1e3352;
+  stroke: #3a5f8f;
 }
 @keyframes ring-expand {
   0% { transform: scale(1); opacity: 0.75; }
@@ -563,7 +582,7 @@ button { font-family: inherit; }
   font-family: var(--font-display);
   font-size: 2.5rem;
   font-weight: 800;
-  color: rgba(62, 207, 142, 0.25);
+  color: rgba(0, 210, 255, 0.28);
   letter-spacing: -0.04em;
   margin-bottom: 12px;
 }
@@ -585,9 +604,9 @@ button { font-family: inherit; }
   background: var(--ink-2);
 }
 .pricing-card-featured {
-  border-color: rgba(62, 207, 142, 0.45);
+  border-color: rgba(0, 210, 255, 0.45);
   background:
-    linear-gradient(160deg, rgba(62, 207, 142, 0.1), transparent 45%),
+    linear-gradient(160deg, rgba(0, 210, 255, 0.12), transparent 45%),
     var(--ink-2);
 }
 .pricing-badge {
@@ -596,8 +615,8 @@ button { font-family: inherit; }
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink);
-  background: var(--leaf);
+  color: #05070a;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   padding: 4px 8px;
   border-radius: 4px;
   margin-bottom: 14px;
@@ -691,7 +710,7 @@ button { font-family: inherit; }
   transition: border-color 0.2s, transform 0.2s;
 }
 .download-featured-card:hover {
-  border-color: rgba(62, 207, 142, 0.5);
+  border-color: rgba(0, 210, 255, 0.5);
   transform: translateY(-2px);
 }
 .download-featured-badge {
@@ -872,7 +891,13 @@ body.auth-modal-open { overflow: hidden; }
   font-weight: 700;
   font-size: 18px;
 }
-.auth-brand-name span { color: var(--leaf); }
+.auth-brand-name span {
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
 .auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -913,8 +938,8 @@ body.auth-modal-open { overflow: hidden; }
 }
 .auth-error.is-success {
   background: var(--success-bg);
-  border-color: rgba(62, 207, 142, 0.35);
-  color: #86efac;
+  border-color: rgba(0, 210, 255, 0.35);
+  color: #7ae7ff;
 }
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
 .auth-field {
@@ -935,8 +960,8 @@ body.auth-modal-open { overflow: hidden; }
   outline: none;
 }
 .auth-field input:focus {
-  border-color: var(--leaf);
-  box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.15);
 }
 .auth-field input::placeholder { color: var(--paper-dim); }
 .auth-reset {
