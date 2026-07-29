@@ -399,6 +399,9 @@ func (a *Agent) setupFirewall() error {
 	if err := ensureMasquerade(a.cfg.WGSubnet, a.cfg.WGInterface); err != nil {
 		a.logger.Warn("iptables MASQUERADE failed (non-fatal)", zap.Error(err))
 	}
+	if err := ensureForwardAccept(a.cfg.WGInterface); err != nil {
+		a.logger.Warn("iptables FORWARD accept failed (non-fatal)", zap.Error(err))
+	}
 
 	if err := a.fwManager.SetupNAT(a.cfg.WGInterface); err != nil {
 		a.logger.Warn("NAT setup failed (non-fatal)", zap.Error(err))
@@ -438,6 +441,25 @@ func ensureMasquerade(subnet, wgIface string) error {
 		return nil
 	}
 	return exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", subnet, "-o", egress, "-j", "MASQUERADE").Run()
+}
+
+// ensureForwardAccept inserts ACCEPT rules at the top of FORWARD so WG traffic is
+// not dropped by a default DROP policy / UFW reject rules later in the chain.
+func ensureForwardAccept(wgIface string) error {
+	if wgIface == "" {
+		wgIface = "wg0"
+	}
+	_ = exec.Command("iptables", "-D", "FORWARD", "-i", wgIface, "-j", "ACCEPT").Run()
+	_ = exec.Command("iptables", "-D", "FORWARD", "-o", wgIface, "-j", "ACCEPT").Run()
+	_ = exec.Command("iptables", "-D", "FORWARD", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT").Run()
+
+	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-o", wgIface, "-j", "ACCEPT").Run(); err != nil {
+		return err
+	}
+	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-i", wgIface, "-j", "ACCEPT").Run(); err != nil {
+		return err
+	}
+	return exec.Command("iptables", "-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT").Run()
 }
 
 func (a *Agent) registerWithManager(ctx context.Context) (*RegisterServerResponse, error) {
