@@ -195,6 +195,7 @@ func cmdConnect() {
 		ServerPubkey     string   `json:"server_public_key"`
 		AssignedIP       string   `json:"assigned_ip"`
 		DNSServer        string   `json:"dns_server"`
+		PresharedKey     string   `json:"preshared_key"`
 		AllowedIPs       []string `json:"allowed_ips"`
 		ClientAllowedIPs []string `json:"client_allowed_ips"`
 		Error            string   `json:"error"`
@@ -217,6 +218,11 @@ func cmdConnect() {
 		dns = "1.1.1.1"
 	}
 
+	pskLine := ""
+	if result.PresharedKey != "" {
+		pskLine = fmt.Sprintf("PresharedKey = %s\n", result.PresharedKey)
+	}
+
 	config := fmt.Sprintf(`[Interface]
 PrivateKey = %s
 Address = %s
@@ -224,10 +230,10 @@ DNS = %s
 
 [Peer]
 PublicKey = %s
-AllowedIPs = %s
+%sAllowedIPs = %s
 Endpoint = %s
 PersistentKeepalive = 25
-`, priv, result.AssignedIP, dns, result.ServerPubkey,
+`, priv, result.AssignedIP, dns, result.ServerPubkey, pskLine,
 		strings.Join(allowed, ", "), result.ServerEndpoint)
 
 	_ = os.MkdirAll(configDir(), 0700)

@@ -37,6 +37,7 @@ interface PeerResponse {
   server_endpoint: string;
   assigned_ip: string;
   dns_server: string;
+  preshared_key?: string;
   allowed_ips?: string[];
   client_allowed_ips?: string[];
   error?: string;
@@ -174,6 +175,7 @@ function App() {
           endpoint: peer.server_endpoint,
           allowed_ips: allowed,
           peer_id: peer.peer_id,
+          preshared_key: peer.preshared_key || "",
         },
       });
 

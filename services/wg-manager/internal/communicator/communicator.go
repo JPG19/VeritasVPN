@@ -2,6 +2,7 @@ package communicator
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -96,12 +97,15 @@ func NewSSEAgentClient(h *hub.Hub, log *logging.Logger) AgentClient {
 
 func (s *SSEAgentClient) PushPeerUpdate(ctx context.Context, serverID string, action string, peerID string, publicKey string, presharedKey string, allowedIPs []string) error {
 	_ = ctx
-	s.hub.Publish(serverID, hub.PeerUpdate{
+	ok := s.hub.Publish(serverID, hub.PeerUpdate{
 		Action:       strings.ToUpper(action),
 		PeerID:       peerID,
 		PublicKey:    publicKey,
 		PresharedKey: presharedKey,
 		AllowedIPs:   allowedIPs,
 	})
+	if !ok {
+		return fmt.Errorf("no agent connected for server %s", serverID)
+	}
 	return nil
 }
