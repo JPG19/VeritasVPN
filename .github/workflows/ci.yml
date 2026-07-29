@@ -16,7 +16,7 @@ jobs:
         env:
           POSTGRES_DB: veritas
           POSTGRES_USER: veritas
-          POSTGRES_PASSWORD: veritas_dev
+          POSTGRES_PASSWORD: ci-test-password
         ports:
           - 5432:5432
         options: >-
@@ -38,7 +38,7 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: postgres://veritas:veritas_dev@localhost:5432/veritas?sslmode=disable
+          DATABASE_URL: postgres://veritas:ci-test-password@localhost:5432/veritas?sslmode=disable
           REDIS_URL: redis://localhost:6379/0
           JWT_SECRET: test-secret-for-ci-purposes-only
           AGENT_AUTH_TOKEN: test-agent-token

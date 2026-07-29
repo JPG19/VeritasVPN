@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: veritas
       POSTGRES_USER: veritas
-      POSTGRES_PASSWORD: veritas_dev
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me-set-in-env-file}
     ports:
       - "5432:5432"
     volumes:
@@ -42,10 +42,10 @@ services:
     ports:
       - "8081:8080"
     environment:
-      DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
+      DATABASE_URL: postgres://veritas:${DB_PASSWORD:-change-me}@postgres:5432/veritas?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       NATS_URL: nats://nats:4222
-      JWT_SECRET: dev-secret-change-in-production-use-64-char-random-string
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       LOG_LEVEL: debug
       LOG_FORMAT: console
       ENVIRONMENT: development
@@ -65,11 +65,11 @@ services:
     ports:
       - "8082:8080"
     environment:
-      DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
+      DATABASE_URL: postgres://veritas:${DB_PASSWORD:-change-me}@postgres:5432/veritas?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       NATS_URL: nats://nats:4222
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production-use-64-char-random-string}
-      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:-dev-agent-token}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:?AGENT_AUTH_TOKEN must be set in .env}
       LOG_LEVEL: debug
       LOG_FORMAT: console
       ENVIRONMENT: development
@@ -92,7 +92,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     environment:
-      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:-dev-agent-token}
+      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:?AGENT_AUTH_TOKEN must be set in .env}
       MANAGER_ENDPOINT: ${MANAGER_ENDPOINT:-http://127.0.0.1:8082}
       PUBLIC_IP: ${PUBLIC_IP:-REDACTED_IP}
       WG_INTERFACE: wg0
@@ -119,10 +119,10 @@ services:
       - default
       - btcpay_default
     environment:
-      DATABASE_URL: postgres://veritas:veritas_dev@postgres:5432/veritas?sslmode=disable
+      DATABASE_URL: postgres://veritas:${DB_PASSWORD:-change-me}@postgres:5432/veritas?sslmode=disable
       NATS_URL: nats://nats:4222
-      JWT_SECRET: dev-secret-change-in-production-use-64-char-random-string
-      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:-dev-agent-token}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:?AGENT_AUTH_TOKEN must be set in .env}
       BTCPAY_SERVER_URL: ${BTCPAY_SERVER_URL:-http://host.docker.internal:49392}
       BTCPAY_API_KEY: ${BTCPAY_API_KEY:-}
       BTCPAY_STORE_ID: ${BTCPAY_STORE_ID:-}
