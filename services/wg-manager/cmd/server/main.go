@@ -75,7 +75,12 @@ func main() {
 	agentClient := communicator.NewSSEAgentClient(sseHub, log)
 	comm := communicator.New(agentClient, log)
 
-	svc := service.New(pgRepo, redisRepo, sched, comm, nc, cfg.AgentAuthToken, log)
+	tierCache := entitlement.NewTierCache(log)
+	if err := tierCache.StartSync(nc); err != nil {
+		log.Fatal("failed to start tier sync", "error", err)
+	}
+
+	svc := service.New(pgRepo, redisRepo, sched, comm, nc, cfg.AgentAuthToken, tierCache, log)
 	svc.SetFreeAllowedRegions(entitlement.ParseFreeRegions(os.Getenv("FREE_ALLOWED_REGIONS")))
 	httpHandler := handler.NewHTTPHandler(svc, sseHub, cfg.JWTSecret, cfg.AgentAuthToken, log)
 
