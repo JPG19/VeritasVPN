@@ -175,8 +175,12 @@ services:
       - auth-svc
     restart: unless-stopped
 
-  # Remotely-managed Cloudflare tunnel (CLOUDFLARE_TUNNEL_TOKEN in .env).
+  # Fallback tunnel when the k8s cloudflared connector is down.
+  # Production normally uses deploy/k8s ingress-nginx/cloudflared — do not run
+  # both with the same token (Cloudflare load-balances and can hit a broken path).
+  # Enable with: docker compose --profile tunnel-fallback up -d cloudflared
   cloudflared:
+    profiles: ["tunnel-fallback"]
     image: cloudflare/cloudflared:latest
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     restart: unless-stopped

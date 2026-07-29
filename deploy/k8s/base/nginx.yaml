@@ -20,15 +20,9 @@ data:
         root /usr/share/nginx/html;
         index index.html;
 
-        if ($http_x_forwarded_proto != "https") {
-            set $redirect_https 1;
-        }
-        if ($request_uri = /healthz) {
-            set $redirect_https 0;
-        }
-        if ($redirect_https = 1) {
-            return 301 https://$host$request_uri;
-        }
+        # Cloudflare Tunnel terminates TLS at the edge and connects over HTTP
+        # without always setting X-Forwarded-Proto. Forcing an https:// redirect
+        # here (or via ingress ssl-redirect) causes a public redirect loop.
 
         add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
         add_header X-Content-Type-Options "nosniff" always;
