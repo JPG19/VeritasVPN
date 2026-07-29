@@ -43,7 +43,7 @@ spec:
     spec:
       containers:
         - name: monero-wallet-rpc
-          image: btcpayserver/monero:latest
+          image: btcpayserver/monero:0.18.4.3
           args:
             - monero-wallet-rpc
             - --non-interactive
@@ -64,19 +64,13 @@ spec:
             - name: wallet-data
               mountPath: /wallet
           readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - curl -s -X POST http://localhost:18082/json_rpc -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"get_version"}' | grep -q 'result' || exit 1
+            tcpSocket:
+              port: 18082
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - curl -s -X POST http://localhost:18082/json_rpc -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"get_version"}' | grep -q 'result' || exit 1
+            tcpSocket:
+              port: 18082
             initialDelaySeconds: 30
             periodSeconds: 20
           resources:

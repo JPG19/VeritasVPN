@@ -37,7 +37,7 @@ spec:
     spec:
       containers:
         - name: monerod
-          image: btcpayserver/monero:latest
+          image: btcpayserver/monero:0.18.4.3
           args:
             - monerod
             - --non-interactive
@@ -60,19 +60,13 @@ spec:
             - name: monero-data
               mountPath: /home/monero/.bitmonero
           readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - curl -s -X POST http://localhost:18081/get_info -H 'Content-Type: application/json' -d '{}' | grep -q 'status' || exit 1
+            tcpSocket:
+              port: 18081
             initialDelaySeconds: 60
             periodSeconds: 30
           livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - curl -s -X POST http://localhost:18081/get_info -H 'Content-Type: application/json' -d '{}' | grep -q 'status' || exit 1
+            tcpSocket:
+              port: 18081
             initialDelaySeconds: 120
             periodSeconds: 60
           resources:
