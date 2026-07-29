@@ -42,7 +42,7 @@ type Config struct {
 func Load() *Config {
 	return &Config{
 		ServerPort:  envOrDefault("SERVER_PORT", "8080"),
-		DatabaseURL: envOrDefault("DATABASE_URL", "postgres://veritas:veritas_dev@localhost:5432/veritas?sslmode=disable"),
+		DatabaseURL: envOrDefault("DATABASE_URL", "postgres://veritas:change-me@localhost:5432/veritas?sslmode=disable"),
 		RedisURL:    envOrDefault("REDIS_URL", "redis://localhost:6379/0"),
 		NatsURL:     envOrDefault("NATS_URL", "nats://localhost:4222"),
 		JWTSecret:   envRequired("JWT_SECRET"),
