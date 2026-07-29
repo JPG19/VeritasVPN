@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VeritasVPN — Privacy is truth. A transparent, open-source, WireGuard-only VPN service. No logs. No tracking. No compromises.">
+    <meta name="description" content="VeritasVPN — Privacy is truth. WireGuard VPN from Paraguay. Anonymous accounts. Bitcoin Premium. Source-available under BSL.">
     <title>VeritasVPN — Privacy is truth.</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" type="image/png" href="assets/favicon.png">
 </head>
 <body>
     <nav class="navbar" id="navbar">
         <div class="container">
-            <a href="#" class="logo">
+            <a href="/" class="logo">
                 <img src="assets/logo-mark.png" alt="" class="logo-mark" width="36" height="36">
                 <span class="logo-text">Veritas<span class="logo-highlight">VPN</span></span>
             </a>
             <ul class="nav-links">
-                <li><a href="#features">Features</a></li>
-                <li><a href="#how-it-works">How It Works</a></li>
+                <li><a href="#network">Network</a></li>
+                <li><a href="#product">Product</a></li>
                 <li><a href="#pricing">Pricing</a></li>
                 <li><a href="downloads.html">Download</a></li>
                 <li><a href="#faq">FAQ</a></li>
@@ -48,357 +48,268 @@
     </nav>
 
     <section class="hero">
+        <div class="hero-map-plane" id="heroMap" aria-hidden="true"></div>
+        <div class="hero-scrim" aria-hidden="true"></div>
         <div class="container">
-            <div class="hero-content">
-                <div class="hero-brand">
-                    <img src="assets/logo.png" alt="VeritasVPN — Truth. Privacy. Security." class="hero-logo" width="280" height="223">
-                </div>
-                <div class="hero-badge">
-                    <span class="badge-dot"></span> WireGuard-only protocol
-                </div>
-                <h1 class="hero-title">
-                    Privacy is <span class="gradient-text">truth.</span>
-                </h1>
-                <p class="hero-subtitle">
-                    A transparent, WireGuard-only VPN under active development. Source-available clients and infra.
-                    Anonymous accounts. Pay Premium with Bitcoin. No email required.
-                </p>
-                <div class="hero-actions">
-                    <button type="button" class="btn btn-primary btn-lg" data-auth-gate="dashboard">
-                        Get VeritasVPN
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                    <a href="#how-it-works" class="btn btn-outline btn-lg">How it works</a>
-                </div>
-                <div class="hero-trust">
-                    <div class="trust-item">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        Open Source
-                    </div>
-                    <div class="trust-item">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        No Logs
-                    </div>
-                    <div class="trust-item">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        Bitcoin Payments
-                    </div>
-                </div>
+            <p class="hero-brand-name">Veritas<span>VPN</span></p>
+            <h1 class="hero-title">Privacy is truth.</h1>
+            <p class="hero-subtitle">
+                WireGuard from Paraguay. Anonymous accounts. Bitcoin for Premium.
+                One live node today — we only advertise what is running.
+            </p>
+            <div class="hero-actions">
+                <button type="button" class="btn btn-primary btn-lg" data-auth-gate="dashboard">
+                    Get VeritasVPN
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <a href="#network" class="btn btn-outline btn-lg">See the network</a>
             </div>
-            <div class="hero-visual">
-                <div class="hero-card">
-                    <div class="card-header">
-                        <div class="card-dots"><span></span><span></span><span></span></div>
-                        <div class="card-title">veritas connect</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="terminal-line"><span class="terminal-prompt">$</span> veritas connect</div>
-                        <div class="terminal-line muted">&#x25b6; Connecting via WireGuard...</div>
-                        <div class="terminal-line success">&#x2713; Connected</div>
-                        <div class="terminal-line dim">&#x25b6; Tunnel up · full-device route</div>
-                        <div class="terminal-line dim">&#x25b6; Protocol: WireGuard</div>
-                        <div class="terminal-line dim">&#x25b6; Account: anonymous</div>
-                        <div class="terminal-line"><span class="terminal-prompt">$</span> <span class="terminal-cursor">&#x258c;</span></div>
-                    </div>
-                </div>
-                <div class="hero-glow"></div>
+            <div class="hero-meta">
+                <span><strong>1</strong> live location · Paraguay</span>
+                <span><strong>WireGuard</strong> only</span>
+                <span><strong>BSL</strong> source on GitHub</span>
             </div>
         </div>
     </section>
 
-    <section class="trust-bar">
+    <section class="network" id="network">
         <div class="container">
-            <div class="trust-stats">
-                <div class="trust-stat">
-                    <span class="trust-stat-number">0</span>
-                    <span class="trust-stat-label">User logs stored</span>
+            <div class="network-panel reveal">
+                <div class="network-panel-head">
+                    <div>
+                        <span class="section-kicker">Network</span>
+                        <h2>Where traffic exits today</h2>
+                        <p>A single WireGuard egress in Paraguay. When we add regions, they appear here — not before.</p>
+                    </div>
+                    <div class="network-live"><span class="network-live-dot" aria-hidden="true"></span> 1 location live</div>
                 </div>
-                <div class="trust-divider"></div>
-                <div class="trust-stat">
-                    <span class="trust-stat-number">100%</span>
-                    <span class="trust-stat-label">Open-source clients</span>
-                </div>
-                <div class="trust-divider"></div>
-                <div class="trust-stat">
-                    <span class="trust-stat-number">4,000</span>
-                    <span class="trust-stat-label">Lines of WireGuard code</span>
-                </div>
-                <div class="trust-divider"></div>
-                <div class="trust-stat">
-                    <span class="trust-stat-number">1</span>
-                    <span class="trust-stat-label">Live region today · expanding</span>
+                <div class="network-map-wrap" id="panelMap"></div>
+                <div class="network-legend">
+                    <div><span>Live</span> — Paraguay (Asunción metro)</div>
+                    <div><span>Protocol</span> — WireGuard UDP 51820</div>
+                    <div><span>Roadmap</span> — more regions when nodes ship</div>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="features" id="features">
+    <section class="section" id="product">
         <div class="container">
-            <div class="section-header">
-                <h2>Why VeritasVPN?</h2>
-                <p>Built differently from the ground up. No compromises on privacy, transparency, or performance.</p>
+            <div class="section-header reveal">
+                <span class="section-kicker">What you get</span>
+                <h2>Built for what we ship now</h2>
+                <p>No multi-hop theater. No “20+ locations.” Desktop WireGuard, honest limits, and source you can read.</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                    </div>
-                    <h3>WireGuard Only</h3>
-                    <p>We exclusively use WireGuard — the most modern, fastest, and most auditable VPN protocol. 4,000 lines of code vs 600,000+ for legacy protocols.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                    </div>
-                    <h3>No Traffic Logs</h3>
-                    <p>We do not log browsing history or destination traffic. We do store account, billing, and WireGuard peer metadata needed to run the service — details in our <a href="privacy.html">Privacy Policy</a>.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-                    </div>
-                    <h3>Anonymous Accounts</h3>
-                    <p>No email. No name. No phone. Just a randomly generated account ID. Pay Premium with Bitcoin — no card required.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
-                    </div>
-                    <h3>Desktop WireGuard</h3>
-                    <p>macOS (and Linux) desktop apps use real WireGuard tunnels. A kill switch is on the roadmap — not shipped on every platform yet.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    </div>
-                    <h3>Growing Network</h3>
-                    <p>One live egress region today while we expand. Multi-hop and a larger fleet are planned — we will not claim them until they ship.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                    </div>
-                    <h3>Source Available (BSL)</h3>
-                    <p>Clients, agent, and infra live on GitHub under the Business Source License 1.1. Read the code; commercial competing use has limits until the Change Date.</p>
-                </div>
+            <div class="reality-grid reveal">
+                <article class="reality-item">
+                    <h3>WireGuard tunnels</h3>
+                    <p>macOS and Linux desktop use real WireGuard peers. Chrome stays on SOCKS — browsers cannot run WireGuard natively.</p>
+                </article>
+                <article class="reality-item">
+                    <h3>Anonymous accounts</h3>
+                    <p>Create an account ID with no email, or use email/password if you prefer. Premium is Bitcoin via BTCPay — no card required.</p>
+                </article>
+                <article class="reality-item">
+                    <h3>Honest device limits</h3>
+                    <p>Free: 1 WireGuard device. Premium ($5/mo): up to 5. Same Paraguay node for both plans today.</p>
+                </article>
+                <article class="reality-item">
+                    <h3>No traffic logs</h3>
+                    <p>We do not log browsing history or destinations. We do store account, billing, and peer metadata needed to run tunnels — see the <a href="privacy.html">Privacy Policy</a>.</p>
+                </article>
+                <article class="reality-item">
+                    <h3>Source available (BSL)</h3>
+                    <p>Clients, agent, and infra are on GitHub under Business Source License 1.1 — not OSI “open source,” but readable and forkable under BSL terms.</p>
+                </article>
+                <article class="reality-item">
+                    <h3>Early, expanding</h3>
+                    <p>Kill switch, Windows/mobile, and multi-region are roadmap. Warrant canary at <a href="/canary.txt">/canary.txt</a>. We will not claim them until they ship.</p>
+                </article>
             </div>
         </div>
     </section>
 
-    <section class="how-it-works" id="how-it-works">
+    <section class="section how-it-works" id="how-it-works">
         <div class="container">
-            <div class="section-header">
-                <h2>Get protected in under a minute</h2>
-                <p>No sign-up forms, no personal information. Just three steps.</p>
+            <div class="section-header reveal">
+                <span class="section-kicker">How it works</span>
+                <h2>Three steps to a tunnel</h2>
+                <p>Download, create an account, connect. Your egress is Paraguay until the map grows.</p>
             </div>
-            <div class="steps">
+            <div class="steps reveal">
                 <div class="step">
                     <div class="step-number">01</div>
-                    <h3>Download the app</h3>
-                    <p>Ready today: <a href="install/macos.html">macOS</a>, Linux desktop, and the <a href="install/chrome.html">Chrome</a> extension. Windows and mobile are on the roadmap — see <a href="downloads.html">all platforms</a>.</p>
+                    <h3>Download</h3>
+                    <p>Ready now: <a href="install/macos.html">macOS</a>, Linux desktop, and the <a href="install/chrome.html">Chrome</a> extension. Windows and mobile are coming.</p>
                 </div>
-                <div class="step-connector"></div>
                 <div class="step">
                     <div class="step-number">02</div>
-                    <h3>Create an account</h3>
-                    <p>No email, no name, no phone. Just a randomly generated account ID. You're anonymous from day one.</p>
+                    <h3>Account</h3>
+                    <p>Anonymous account ID or email sign-up. Save your credentials — we cannot reset an anonymous ID without it.</p>
                 </div>
-                <div class="step-connector"></div>
                 <div class="step">
                     <div class="step-number">03</div>
-                    <h3>Connect &amp; browse freely</h3>
-                    <p>Connect with WireGuard on desktop. Speeds depend on your path to the current node — we keep the protocol stack simple on purpose.</p>
+                    <h3>Connect</h3>
+                    <p>Desktop brings up WireGuard against the Paraguay node. Speeds depend on your path to South America.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="transparency" id="transparency">
+    <section class="section pricing" id="pricing">
         <div class="container">
-            <div class="section-header">
-                <h2>Radical Transparency</h2>
-                <p>Most VPNs ask you to trust them. We prove it. Every line of server code is public.</p>
+            <div class="section-header reveal">
+                <span class="section-kicker">Pricing</span>
+                <h2>Simple plans</h2>
+                <p>Same network. Premium buys more devices and Bitcoin checkout.</p>
             </div>
-            <div class="transparency-grid">
-                <div class="transparency-card">
-                    <div class="transparency-card-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </div>
-                    <h3>Warrant Canary</h3>
-                    <p>We publish a plain-text warrant canary at <code>/canary.txt</code>, updated monthly when possible. Cryptographic signing may be added later. If updates stop without explanation, treat that as a warning.</p>
-                    <a href="/canary.txt" class="text-link">View latest canary &rarr;</a>
-                </div>
-                <div class="transparency-card">
-                    <div class="transparency-card-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-                    </div>
-                    <h3>Security Reviews</h3>
-                    <p>No third-party audit reports are published yet. Until then, review the public source, our Privacy Policy, and file issues on GitHub. Independent audits are a goal, not a current claim.</p>
-                    <a href="https://github.com/JPG19/VeritasVPN/issues" class="text-link" target="_blank" rel="noopener">Report issues &rarr;</a>
-                </div>
-                <div class="transparency-card">
-                    <div class="transparency-card-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
-                    </div>
-                    <h3>Open Source</h3>
-                    <p>All client apps, server provisioning, and infrastructure code live on GitHub. You can verify every claim we make by reading the code.</p>
-                    <a href="https://github.com/JPG19/VeritasVPN" class="text-link" target="_blank" rel="noopener">View on GitHub &rarr;</a>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="pricing" id="pricing">
-        <div class="container">
-            <div class="section-header">
-                <h2>Simple, transparent pricing</h2>
-                <p>Two plans. Bitcoin for Premium. No hidden fees. Cancel anytime by letting the period expire.</p>
-            </div>
-            <div class="pricing-grid">
+            <div class="pricing-grid reveal">
                 <div class="pricing-card">
-                    <div class="pricing-card-header">
-                        <h3>Free</h3>
-                        <p class="pricing-description">Get started with the essentials.</p>
-                    </div>
-                    <div class="pricing-price">
-                        <span class="currency">$</span>0<span class="period">/month</span>
-                    </div>
+                    <h3>Free</h3>
+                    <p class="pricing-description">Start on the live node.</p>
+                    <div class="pricing-price"><span class="currency">$</span>0<span class="period">/month</span></div>
                     <ul class="pricing-features">
-                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Access to the current network</li>
-                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 1 device (WireGuard peer)</li>
-                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Anonymous account ID</li>
-                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> macOS / Linux desktop + Chrome</li>
+                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 4L6 11.5 2.5 8" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Paraguay egress</li>
+                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 4L6 11.5 2.5 8" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 1 WireGuard device</li>
+                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 4L6 11.5 2.5 8" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Anonymous account ID</li>
+                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 4L6 11.5 2.5 8" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> macOS / Linux + Chrome</li>
                     </ul>
-                    <button type="button" class="btn btn-outline btn-block" data-auth-gate="dashboard">Get Started Free</button>
+                    <button type="button" class="btn btn-outline btn-block" data-auth-gate="dashboard">Get started free</button>
                 </div>
                 <div class="pricing-card pricing-card-featured">
                     <div class="pricing-badge">Premium</div>
-                    <div class="pricing-card-header">
-                        <h3>Premium</h3>
-                        <p class="pricing-description">Full access. Pay with Bitcoin.</p>
-                    </div>
-                    <div class="pricing-price">
-                        <span class="currency">$</span>5<span class="period">/month</span>
-                    </div>
+                    <h3>Premium</h3>
+                    <p class="pricing-description">More devices. Pay with Bitcoin.</p>
+                    <div class="pricing-price"><span class="currency">$</span>5<span class="period">/month</span></div>
                     <ul class="pricing-features">
-                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Same network + priority support</li>
-                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Up to 5 devices</li>
-                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Pay with Bitcoin (no card)</li>
-                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6 11.5 2.5 8" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> More locations on the roadmap</li>
+                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 4L6 11.5 2.5 8" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Same Paraguay node</li>
+                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 4L6 11.5 2.5 8" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Up to 5 devices</li>
+                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 4L6 11.5 2.5 8" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Bitcoin checkout (BTCPay)</li>
+                        <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 4L6 11.5 2.5 8" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> More locations when we expand</li>
                     </ul>
                     <button type="button" class="btn btn-primary btn-block" data-billing-checkout>Upgrade with Bitcoin</button>
                 </div>
             </div>
-            <div class="pricing-crypto">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 8h4a2 2 0 010 4h-3"/><path d="M12 8v8"/><path d="M9 12h4a2 2 0 010 4h-3"/></svg>
-                <span>Premium is <strong>$5/month</strong>, paid in <strong>Bitcoin</strong>. Sign in, then click Upgrade to open checkout.</span>
+            <div class="pricing-crypto reveal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9 8h4a2 2 0 010 4h-3"/><path d="M12 8v8"/><path d="M9 12h4a2 2 0 010 4h-3"/></svg>
+                <span>Premium is <strong>$5/month</strong> in <strong>Bitcoin</strong>. Sign in, then Upgrade to open checkout.</span>
             </div>
         </div>
     </section>
 
-    <section class="downloads downloads-teaser" id="downloads">
+    <section class="section transparency" id="transparency">
         <div class="container">
-            <div class="section-header">
-                <h2>Download VeritasVPN</h2>
-                <p>macOS for full-device protection. Chrome for quick browser coverage.</p>
+            <div class="section-header reveal">
+                <span class="section-kicker">Transparency</span>
+                <h2>Trust is earned in public</h2>
+                <p>Canary, source, and policies — no “audited by everyone” fiction.</p>
             </div>
-            <div class="download-featured download-featured-home">
+            <div class="transparency-list reveal">
+                <div class="transparency-row">
+                    <h3>Warrant canary</h3>
+                    <p>Plain-text canary at <code>/canary.txt</code>, updated when we can. Cryptographic signing may come later. Silence without explanation is a warning.</p>
+                    <a href="/canary.txt">View canary →</a>
+                </div>
+                <div class="transparency-row">
+                    <h3>Source (BSL)</h3>
+                    <p>Clients, agent, and infra on GitHub under BSL 1.1. Read the code; commercial competing use has limits until the Change Date.</p>
+                    <a href="https://github.com/JPG19/VeritasVPN" target="_blank" rel="noopener">GitHub →</a>
+                </div>
+                <div class="transparency-row">
+                    <h3>Reviews</h3>
+                    <p>No third-party audit reports published yet. File issues on GitHub. Independent audits are a goal, not a current claim.</p>
+                    <a href="https://github.com/JPG19/VeritasVPN/issues" target="_blank" rel="noopener">Issues →</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section downloads downloads-teaser" id="downloads">
+        <div class="container">
+            <div class="section-header reveal">
+                <span class="section-kicker">Clients</span>
+                <h2>Download VeritasVPN</h2>
+                <p>macOS for full-device WireGuard. Chrome for browser SOCKS.</p>
+            </div>
+            <div class="download-featured reveal">
                 <a class="download-featured-card" href="install/macos.html">
                     <span class="download-featured-badge">Desktop</span>
                     <h3>macOS</h3>
                     <p>Native WireGuard app</p>
                     <span class="btn btn-primary">Download for Mac</span>
                 </a>
-                <a class="download-featured-card is-ready" href="install/chrome.html">
-                    <span class="download-featured-badge is-live">Available now</span>
+                <a class="download-featured-card" href="install/chrome.html">
+                    <span class="download-featured-badge is-live">Browser</span>
                     <h3>Chrome</h3>
-                    <p>Browser extension</p>
+                    <p>SOCKS extension</p>
                     <span class="btn btn-primary">Add to Chrome</span>
                 </a>
             </div>
-            <div class="downloads-teaser-cta">
+            <div class="downloads-teaser-cta reveal">
                 <a href="downloads.html" class="btn btn-outline">All platforms</a>
             </div>
         </div>
     </section>
 
-    <section class="faq" id="faq">
+    <section class="section faq" id="faq">
         <div class="container">
-            <div class="section-header">
-                <h2>Frequently asked questions</h2>
-                <p>Everything you need to know about VeritasVPN.</p>
+            <div class="section-header reveal">
+                <span class="section-kicker">FAQ</span>
+                <h2>Straight answers</h2>
             </div>
-            <div class="faq-list">
+            <div class="faq-list reveal">
                 <div class="faq-item">
                     <button class="faq-question" aria-expanded="false">
-                        <span>How is VeritasVPN different from other VPNs?</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>Where are your servers?</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon" aria-hidden="true"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="faq-answer">
-                        <p>We publish source for clients, the VPN agent, and related infra under the Business Source License 1.1. We use WireGuard exclusively. Anonymous account IDs are supported, and Premium is paid with Bitcoin. Diskless RAM-only servers, multi-hop, and a large multi-region fleet are roadmap goals — not current claims.</p>
+                        <p>One live WireGuard egress in Paraguay (Asunción metro) today. We will add markers to the network map when new nodes are actually online — not before.</p>
                     </div>
                 </div>
                 <div class="faq-item">
                     <button class="faq-question" aria-expanded="false">
-                        <span>What do you mean by "no logs"?</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>How is VeritasVPN different?</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon" aria-hidden="true"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="faq-answer">
-                        <p>We do not intentionally store browsing history, DNS query contents, or destination traffic metadata for later inspection. We do store account identifiers, auth/billing records, and WireGuard peer metadata required to operate tunnels. Edge/CDN access logs may exist. See the <a href="privacy.html">Privacy Policy</a> for details.</p>
+                        <p>WireGuard only. Anonymous account IDs. Premium paid with Bitcoin. Source under BSL 1.1. We refuse to advertise multi-hop, huge fleets, or audits we do not have.</p>
                     </div>
                 </div>
                 <div class="faq-item">
                     <button class="faq-question" aria-expanded="false">
-                        <span>Why WireGuard only? What about OpenVPN?</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>What do you mean by “no logs”?</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon" aria-hidden="true"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="faq-answer">
-                        <p>WireGuard has been extensively audited, runs in the Linux kernel, and consists of only ~4,000 lines of code — making it far easier to audit and secure than OpenVPN (70,000+ lines) or IPsec (400,000+). It's also significantly faster. We believe a smaller attack surface is better for privacy. Every modern device supports WireGuard natively or via our apps.</p>
+                        <p>We do not store browsing history, DNS contents, or destination traffic for later inspection. We do store account IDs, auth/billing records, and WireGuard peer metadata. Edge/CDN access logs may exist. See the <a href="privacy.html">Privacy Policy</a>.</p>
                     </div>
                 </div>
                 <div class="faq-item">
                     <button class="faq-question" aria-expanded="false">
-                        <span>Can I really sign up without an email?</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>Is this open source?</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon" aria-hidden="true"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="faq-answer">
-                        <p>Yes. When you create an account, you receive a randomly generated account ID — no email, name, or phone number required. This is your only credential. Save it securely, as it's the only way to recover your account. Premium is paid with Bitcoin (no card).</p>
+                        <p>Source is public under the Business Source License 1.1 — source-available, not OSI open source. Commercial competing use is restricted until the Change Date. Details are in the LICENSE on GitHub.</p>
                     </div>
                 </div>
                 <div class="faq-item">
                     <button class="faq-question" aria-expanded="false">
-                        <span>What is a warrant canary?</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>Which platforms work today?</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon" aria-hidden="true"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="faq-answer">
-                        <p>A warrant canary is a regularly updated statement that we have <em>not</em> received certain secret legal demands (for example national security letters or gag orders). Ours is published at <a href="/canary.txt">/canary.txt</a>. It is plain text today; cryptographic signing may come later. If it stops updating without explanation, treat that as a potential warning.</p>
-                    </div>
-                </div>
-                <div class="faq-item">
-                    <button class="faq-question" aria-expanded="false">
-                        <span>Which platforms are supported?</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p>Ready today: macOS desktop (WireGuard), Linux desktop, and the Chrome extension ZIP. Windows and mobile clients are planned. Source is on GitHub under BSL 1.1.</p>
-                    </div>
-                </div>
-                <div class="faq-item">
-                    <button class="faq-question" aria-expanded="false">
-                        <span>Where are your servers located?</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p>We currently operate a single live egress region while the network expands. We will not advertise “20+ locations” or multi-provider fleets until those nodes are actually online.</p>
+                        <p>macOS desktop (WireGuard), Linux desktop, and the Chrome extension (SOCKS). Windows and mobile are planned.</p>
                     </div>
                 </div>
                 <div class="faq-item">
                     <button class="faq-question" aria-expanded="false">
                         <span>Do you have a kill switch?</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="faq-icon" aria-hidden="true"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="faq-answer">
-                        <p>Not as a finished, cross-platform feature yet. A full OS-level kill switch (block traffic if the tunnel drops) is on the roadmap. Until it ships, disconnect carefully and use the emergency disconnect helpers documented for macOS if needed.</p>
+                        <p>Not as a finished cross-platform feature yet. It is on the roadmap. Until then, disconnect carefully and use the macOS emergency disconnect helpers if needed.</p>
                     </div>
                 </div>
             </div>
@@ -407,14 +318,11 @@
 
     <section class="cta-section">
         <div class="container">
-            <h2>Ready to take back your privacy?</h2>
-            <p>Early-stage VPN with honest docs. No traffic logs by design. Source on GitHub.</p>
-            <div class="cta-actions">
-                <button type="button" class="btn btn-primary btn-lg" data-auth-gate="dashboard">Get Started Now</button>
-                <a href="https://github.com/JPG19/VeritasVPN" class="btn btn-outline btn-lg" target="_blank" rel="noopener">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    View on GitHub
-                </a>
+            <h2 class="reveal">Ready when you are</h2>
+            <p class="reveal">Early-stage WireGuard VPN from Paraguay. Honest docs. Source on GitHub.</p>
+            <div class="cta-actions reveal">
+                <button type="button" class="btn btn-primary btn-lg" data-auth-gate="dashboard">Get started</button>
+                <a href="https://github.com/JPG19/VeritasVPN" class="btn btn-outline btn-lg" target="_blank" rel="noopener">View on GitHub</a>
             </div>
         </div>
     </section>
@@ -427,17 +335,17 @@
                         <img src="assets/logo-mark.png" alt="" class="logo-mark" width="40" height="40">
                         <span class="logo-text">Veritas<span class="logo-highlight">VPN</span></span>
                     </a>
-                    <p>Privacy is truth. A transparent, source-available VPN service.</p>
+                    <p>Privacy is truth. WireGuard from Paraguay. Source-available under BSL.</p>
                     <div class="footer-social">
                         <a href="https://github.com/JPG19/VeritasVPN" target="_blank" rel="noopener" aria-label="GitHub">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
                         </a>
                     </div>
                 </div>
                 <div class="footer-links">
                     <h4>Product</h4>
                     <ul>
-                        <li><a href="#features">Features</a></li>
+                        <li><a href="#network">Network</a></li>
                         <li><a href="#pricing">Pricing</a></li>
                         <li><a href="downloads.html">Download</a></li>
                         <li><a href="install/">Install guides</a></li>
@@ -464,7 +372,7 @@
             </div>
             <div class="footer-bottom">
                 <p>&copy; 2026 VeritasVPN. All rights reserved.</p>
-                <p class="footer-tagline">Honest docs. WireGuard. Source on GitHub.</p>
+                <p class="footer-tagline">Paraguay · WireGuard · BSL on GitHub</p>
             </div>
         </div>
     </footer>
@@ -503,6 +411,6 @@
         </div>
     </div>
 
-    <script type="module" src="js/main.js?v=6"></script>
+    <script type="module" src="js/main.js?v=7"></script>
 </body>
 </html>
