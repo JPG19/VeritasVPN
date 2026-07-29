@@ -6,8 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/veritasvpn/lib/logging"
+	"github.com/veritasvpn/services/wg-manager/internal/entitlement"
 	"github.com/veritasvpn/services/wg-manager/internal/hub"
 	"github.com/veritasvpn/services/wg-manager/internal/service"
 )
@@ -231,7 +234,7 @@ type createPeerRequest struct {
 }
 
 func (h *HTTPHandler) handlePeers(w http.ResponseWriter, r *http.Request) {
-	accountID, err := h.accountFromRequest(r)
+	accountID, tier, err := h.accountFromRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
 		return
@@ -248,8 +251,14 @@ func (h *HTTPHandler) handlePeers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "public_key is required"})
 			return
 		}
-		cfg, err := h.svc.CreatePeer(r.Context(), accountID, req.PublicKey, req.Region)
+		cfg, err := h.svc.CreatePeer(r.Context(), accountID, tier, req.PublicKey, req.Region)
 		if err != nil {
+			var planErr *entitlement.PlanError
+			if errors.As(err, &planErr) {
+				h.log.Warn("create peer denied by plan", "account_id", accountID, "tier", tier, "code", planErr.Code)
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": planErr.Message, "code": planErr.Code})
+				return
+			}
 			h.log.Error("create peer failed", "account_id", accountID, "error", err)
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
@@ -279,7 +288,7 @@ func (h *HTTPHandler) handlePeers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPHandler) handlePeerByID(w http.ResponseWriter, r *http.Request) {
-	accountID, err := h.accountFromRequest(r)
+	accountID, _, err := h.accountFromRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
 		return
@@ -320,7 +329,7 @@ func (h *HTTPHandler) handleListServers(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, err := h.accountFromRequest(r); err != nil {
+	if _, _, err := h.accountFromRequest(r); err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
 		return
 	}
@@ -338,10 +347,10 @@ type claims struct {
 	jwt.RegisteredClaims
 }
 
-func (h *HTTPHandler) accountFromRequest(r *http.Request) (string, error) {
+func (h *HTTPHandler) accountFromRequest(r *http.Request) (accountID, tier string, err error) {
 	tokenStr := extractBearer(r)
 	if tokenStr == "" {
-		return "", errUnauthorized("missing bearer token")
+		return "", "", errUnauthorized("missing bearer token")
 	}
 	token, err := jwt.ParseWithClaims(tokenStr, &claims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -350,13 +359,13 @@ func (h *HTTPHandler) accountFromRequest(r *http.Request) (string, error) {
 		return h.jwtSecret, nil
 	})
 	if err != nil {
-		return "", errUnauthorized("invalid token")
+		return "", "", errUnauthorized("invalid token")
 	}
 	c, ok := token.Claims.(*claims)
 	if !ok || !token.Valid || c.AccountID == "" {
-		return "", errUnauthorized("invalid token claims")
+		return "", "", errUnauthorized("invalid token claims")
 	}
-	return c.AccountID, nil
+	return c.AccountID, entitlement.NormalizeTier(c.Tier), nil
 }
 
 type unauthorizedError struct{ msg string }

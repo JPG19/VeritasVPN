@@ -77,6 +77,23 @@ export function getStoredToken(): string | null {
   return localStorage.getItem(STORAGE_KEYS.accessToken);
 }
 
+/** Refresh access token so JWT tier matches billing after Premium purchase. */
+export async function refreshSession(): Promise<boolean> {
+  const rt = localStorage.getItem(STORAGE_KEYS.refreshToken);
+  if (!rt) return false;
+  try {
+    const data = await authAPI("/api/v1/auth/refresh", {
+      refresh_token: rt,
+    });
+    const user = getStoredUser();
+    if (!user) return false;
+    persistSession(user, data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function signIn(
   email: string,
   password: string

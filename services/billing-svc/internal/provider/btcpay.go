@@ -148,9 +148,7 @@ func (b *BTCPayProvider) ParseWebhook(payload []byte, signature string) (*Webhoo
 
 func (b *BTCPayProvider) verifySignature(payload []byte, signature string) error {
 	if b.webhookSecret == "" {
-		// Development only — production must set BTCPAY_WEBHOOK_SECRET.
-		b.log.Warn("btcpay webhook signature verification skipped (no webhook secret)")
-		return nil
+		return fmt.Errorf("BTCPAY_WEBHOOK_SECRET is required for webhook verification")
 	}
 	if signature == "" {
 		return fmt.Errorf("missing BTCPay-Sig header")

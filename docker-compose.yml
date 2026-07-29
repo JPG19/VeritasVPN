@@ -55,6 +55,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      nats:
+        condition: service_started
 
   wg-manager:
     build:
@@ -71,6 +73,7 @@ services:
       LOG_LEVEL: debug
       LOG_FORMAT: console
       ENVIRONMENT: development
+      FREE_ALLOWED_REGIONS: ${FREE_ALLOWED_REGIONS:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,6 +134,8 @@ services:
       CHECKOUT_CANCEL_URL: ${CHECKOUT_CANCEL_URL:-http://localhost:8000/billing/cancel.html}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       BILLING_PUBLIC_URL: ${BILLING_PUBLIC_URL:-http://localhost:8083}
+      # Opt-in only. Public hosts must leave this false/unset.
+      ALLOW_MOCK_BTCPAY: ${ALLOW_MOCK_BTCPAY:-false}
       LOG_LEVEL: debug
       LOG_FORMAT: console
       ENVIRONMENT: development

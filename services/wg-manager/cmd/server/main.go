@@ -14,6 +14,7 @@ import (
 	"github.com/veritasvpn/lib/config"
 	"github.com/veritasvpn/lib/logging"
 	"github.com/veritasvpn/services/wg-manager/internal/communicator"
+	"github.com/veritasvpn/services/wg-manager/internal/entitlement"
 	"github.com/veritasvpn/services/wg-manager/internal/handler"
 	"github.com/veritasvpn/services/wg-manager/internal/hub"
 	"github.com/veritasvpn/services/wg-manager/internal/migrate"
@@ -75,6 +76,7 @@ func main() {
 	comm := communicator.New(agentClient, log)
 
 	svc := service.New(pgRepo, redisRepo, sched, comm, nc, cfg.AgentAuthToken, log)
+	svc.SetFreeAllowedRegions(entitlement.ParseFreeRegions(os.Getenv("FREE_ALLOWED_REGIONS")))
 	httpHandler := handler.NewHTTPHandler(svc, sseHub, cfg.JWTSecret, cfg.AgentAuthToken, log)
 
 	httpAddr := cfg.HTTPServerAddr()
