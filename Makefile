@@ -1,4 +1,4 @@
-.PHONY: help build build-all test lint clean dev-dev-up dev-down proto
+.PHONY: help build build-all test lint clean dev-dev-up dev-down proto k8s-up k8s-down k8s-status k8s-images k8s-btcpay
 
 help:
 	@echo "VeritasVPN Makefile"
@@ -15,6 +15,11 @@ help:
 	@echo "make lint         - Run linter"
 	@echo "make clean        - Clean build artifacts"
 	@echo "make proto        - Generate proto Go stubs"
+	@echo "make k8s-up       - Apply K8s dev overlay + BTCPay"
+	@echo "make k8s-down     - Delete veritas and btcpay namespaces"
+	@echo "make k8s-status   - Show K8s cluster status"
+	@echo "make k8s-images   - Build and push all service images"
+	@echo "make k8s-btcpay   - Apply BTCPay Server stack"
 
 BUILD_DIR ?= $(CURDIR)/build
 
@@ -83,3 +88,31 @@ go-mod-tidy:
 	cd services/wg-manager && go mod tidy
 	cd services/billing-svc && go mod tidy
 	cd services/veritas-agent && go mod tidy
+
+# ── Kubernetes ─────────────────────────────────────────────
+
+K8S_DIR := $(CURDIR)/deploy/k8s
+REGISTRY ?= localhost:31500
+TAG ?= latest
+
+k8s-up: k8s-btcpay
+	kubectl apply -k $(K8S_DIR)/overlays/dev/
+
+k8s-down:
+	kubectl delete namespace veritas --wait --ignore-not-found
+	kubectl delete namespace btcpay --wait --ignore-not-found
+
+k8s-status:
+	@echo "=== Veritas ==="
+	@kubectl get deploy,sts,ds,svc,ingress -n veritas 2>/dev/null || true
+	@echo ""
+	@echo "=== BTCPay ==="
+	@kubectl get deploy,sts,svc -n btcpay 2>/dev/null || true
+	@echo ""
+	@kubectl get pods -A | grep -E "veritas|btcpay"
+
+k8s-images:
+	REGISTRY=$(REGISTRY) TAG=$(TAG) bash $(K8S_DIR)/scripts/push-images.sh
+
+k8s-btcpay:
+	kubectl apply -k $(K8S_DIR)/btcpay/

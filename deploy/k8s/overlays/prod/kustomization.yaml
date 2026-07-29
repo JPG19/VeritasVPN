@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: veritas
+
+resources:
+  - ../../base
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: veritas-config
+    patch: |-
+      - op: replace
+        path: /data/ENVIRONMENT
+        value: "production"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "info"
+      - op: replace
+        path: /data/ALLOW_MOCK_BTCPAY
+        value: "false"
+
+  - target:
+      kind: Deployment
+      name: redis
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2

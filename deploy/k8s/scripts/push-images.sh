@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGISTRY="${REGISTRY:-localhost:5000}"
+TAG="${TAG:-latest}"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+
+services=("auth-svc" "wg-manager" "billing-svc" "veritas-agent" "veritas-proxy")
+dockerfiles=(
+  "services/auth-svc/Dockerfile"
+  "services/wg-manager/Dockerfile"
+  "services/billing-svc/Dockerfile"
+  "services/veritas-agent/Dockerfile"
+  "containers/proxy-gateway/Dockerfile"
+)
+
+echo "Building images for registry: ${REGISTRY}"
+
+for i in "${!services[@]}"; do
+  svc="${services[$i]}"
+  df="${dockerfiles[$i]}"
+  img="${REGISTRY}/${svc}:${TAG}"
+  ctx="${ROOT}"
+  if [ "$svc" = "veritas-proxy" ]; then
+    ctx="${ROOT}/containers/proxy-gateway"
+  fi
+  echo "--- Building ${img} ---"
+  docker build -t "${img}" -f "${ROOT}/${df}" "${ctx}"
+  docker push "${img}"
+done
+
+echo ""
+echo "All images pushed to ${REGISTRY}"
