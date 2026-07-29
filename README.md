@@ -54,4 +54,8 @@ make test
 
 ## License
 
-Source available. Proprietary components are BSL licensed.
+Licensed under the **Business Source License 1.1** — see [`LICENSE`](./LICENSE).
+
+- Source is publicly available on GitHub.
+- Production use that offers a competing commercial VPN to third parties requires a separate commercial license (see Additional Use Grant).
+- On the Change Date (`2030-07-28`), the Change License (GPL-3.0-or-later) applies to that version.
