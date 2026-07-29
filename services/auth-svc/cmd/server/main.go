@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 	authv1 "github.com/veritasvpn/api/gen/auth/v1"
 	"github.com/veritasvpn/lib/config"
 	"github.com/veritasvpn/lib/logging"
@@ -58,6 +59,22 @@ func main() {
 	svc := service.New(log, db, redisClient, jwtMgr)
 	authHandler := handler.NewAuthHandler(log, svc)
 	authInterceptor := middleware.NewAuthInterceptor(log, jwtMgr, redisClient)
+
+	var natsConn *nats.Conn
+	if cfg.NatsURL != "" {
+		nc, err := nats.Connect(cfg.NatsURL)
+		if err != nil {
+			log.Warn("failed to connect to NATS; tier sync disabled", zap.Error(err))
+		} else {
+			natsConn = nc
+			defer natsConn.Close()
+			if err := svc.StartSubscriptionSync(natsConn, log); err != nil {
+				log.Warn("subscription sync subscribe failed", zap.Error(err))
+			} else {
+				log.Info("listening for billing subscription events")
+			}
+		}
+	}
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(authInterceptor.Unary()),

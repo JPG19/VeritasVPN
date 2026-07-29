@@ -10,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/veritasvpn/lib/logging"
 	"github.com/veritasvpn/services/wg-manager/internal/communicator"
+	"github.com/veritasvpn/services/wg-manager/internal/entitlement"
 	"github.com/veritasvpn/services/wg-manager/internal/model"
 	"github.com/veritasvpn/services/wg-manager/internal/repository"
 	"github.com/veritasvpn/services/wg-manager/internal/scheduler"
@@ -34,6 +35,7 @@ type Service struct {
 	communicator *communicator.Communicator
 	natsConn     *nats.Conn
 	authToken    string
+	freeRegions  []string
 	log          *logging.Logger
 }
 
@@ -55,6 +57,12 @@ func New(
 		authToken:    authToken,
 		log:          log,
 	}
+}
+
+// SetFreeAllowedRegions configures optional Free-plan region allow-list
+// (from FREE_ALLOWED_REGIONS). Empty means any online region.
+func (s *Service) SetFreeAllowedRegions(regions []string) {
+	s.freeRegions = regions
 }
 
 func (s *Service) RegisterServer(ctx context.Context, hostname, publicKey, publicIP string, wgPort int32, region, city, country, authToken string) (*model.Server, error) {
@@ -160,9 +168,22 @@ func (s *Service) HandleHeartbeat(ctx context.Context, serverID string, peerCoun
 	return nil
 }
 
-func (s *Service) CreatePeer(ctx context.Context, accountID, publicKey, preferredRegion string) (*PeerConfig, error) {
+func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, preferredRegion string) (*PeerConfig, error) {
+	tier = entitlement.NormalizeTier(tier)
+
+	existing, err := s.postgres.ListPeersByAccount(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list peers for entitlement: %w", err)
+	}
+	if err := entitlement.CheckCreatePeer(tier, len(existing), preferredRegion, s.freeRegions); err != nil {
+		return nil, err
+	}
+
 	srv, err := s.scheduler.SelectServer(ctx, preferredRegion)
 	if err != nil {
+		return nil, err
+	}
+	if err := entitlement.CheckSelectedRegion(tier, srv.Region, s.freeRegions); err != nil {
 		return nil, err
 	}
 

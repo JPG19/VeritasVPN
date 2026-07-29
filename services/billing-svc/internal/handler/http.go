@@ -20,9 +20,10 @@ type BillingHandler struct {
 	tokenAuth  *tokenauth.Verifier
 	corsAllow  map[string]struct{}
 	successURL string
+	enableMock bool
 }
 
-func NewBillingHandler(log *logging.Logger, svc *service.BillingService, verifier *tokenauth.Verifier, corsOrigins []string, successURL string) *BillingHandler {
+func NewBillingHandler(log *logging.Logger, svc *service.BillingService, verifier *tokenauth.Verifier, corsOrigins []string, successURL string, enableMock bool) *BillingHandler {
 	allow := make(map[string]struct{}, len(corsOrigins))
 	for _, o := range corsOrigins {
 		allow[o] = struct{}{}
@@ -30,7 +31,7 @@ func NewBillingHandler(log *logging.Logger, svc *service.BillingService, verifie
 	if successURL == "" {
 		successURL = "http://localhost:8000/billing/success.html"
 	}
-	return &BillingHandler{log: log, service: svc, tokenAuth: verifier, corsAllow: allow, successURL: successURL}
+	return &BillingHandler{log: log, service: svc, tokenAuth: verifier, corsAllow: allow, successURL: successURL, enableMock: enableMock}
 }
 
 func (h *BillingHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -39,8 +40,10 @@ func (h *BillingHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/billing/cancel", h.withCORS(h.handleCancel))
 	mux.HandleFunc("/api/v1/billing/status", h.withCORS(h.handleStatus))
 	mux.HandleFunc("/api/v1/billing/webhook/btcpay", h.handleBTCPayWebhook)
-	mux.HandleFunc("/api/v1/billing/mock-checkout", h.handleMockCheckout)
-	mux.HandleFunc("/api/v1/billing/mock-settle", h.handleMockSettle)
+	if h.enableMock {
+		mux.HandleFunc("/api/v1/billing/mock-checkout", h.handleMockCheckout)
+		mux.HandleFunc("/api/v1/billing/mock-settle", h.handleMockSettle)
+	}
 }
 
 func (h *BillingHandler) handleHealth(w http.ResponseWriter, r *http.Request) {

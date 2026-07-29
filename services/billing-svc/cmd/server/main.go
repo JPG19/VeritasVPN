@@ -31,6 +31,10 @@ func main() {
 	}
 	defer log.Sync()
 
+	if err := cfg.RequireBTCPayProduction(); err != nil {
+		log.Fatal("invalid production billing config", zap.Error(err))
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -70,7 +74,8 @@ func main() {
 		mock           *provider.MockBTCPayProvider
 	)
 
-	if cfg.UseMockBTCPay() {
+	useMock := cfg.UseMockBTCPay()
+	if useMock {
 		mock = provider.NewMockBTCPayProvider(cfg.BillingPublicURL)
 		invoiceCreator = mock
 		log.Warn("BTCPay mock mode enabled — no real Bitcoin invoices")
@@ -88,6 +93,9 @@ func main() {
 		}
 		invoiceCreator = btcpay
 		log.Info("BTCPay provider configured", zap.String("url", cfg.BTCPayServerURL), zap.String("store", cfg.BTCPayStoreID))
+		if cfg.BTCPayWebhookSecret == "" {
+			log.Warn("BTCPAY_WEBHOOK_SECRET is empty — webhooks will be rejected")
+		}
 	}
 
 	svc := service.New(log, db, natsConn, invoiceCreator, btcpay, mock, service.BillingConfig{
@@ -96,7 +104,7 @@ func main() {
 	})
 
 	tokenVerifier := tokenauth.NewVerifier(cfg.JWTSecret)
-	billingHandler := handler.NewBillingHandler(log, svc, tokenVerifier, cfg.AllowedCORSOrigins(), cfg.CheckoutSuccessURL)
+	billingHandler := handler.NewBillingHandler(log, svc, tokenVerifier, cfg.AllowedCORSOrigins(), cfg.CheckoutSuccessURL, useMock)
 
 	mux := http.NewServeMux()
 	billingHandler.RegisterRoutes(mux)

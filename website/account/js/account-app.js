@@ -97,12 +97,12 @@ function renderHome() {
             premium
               ? `
             <div class="plan-limit">Current network</div>
-            <div class="plan-limit">Premium support</div>
+            <div class="plan-limit">Up to 5 devices</div>
             <div class="plan-limit">Bitcoin billing</div>`
               : `
             <div class="plan-limit">Current network</div>
-            <div class="plan-limit">WireGuard + Chrome</div>
-            <div class="plan-limit">Beta fair-use</div>`
+            <div class="plan-limit">1 device</div>
+            <div class="plan-limit">Free tier</div>`
           }
         </div>
       </div>
@@ -127,9 +127,9 @@ function renderHome() {
         </div>
         <ul class="upgrade-features">
           <li>Access to the current network</li>
+          <li>Up to 5 WireGuard devices</li>
           <li>Pay with Bitcoin (no card)</li>
           <li>Priority support while we expand</li>
-          <li>More locations &amp; features on the roadmap</li>
         </ul>
         <div class="account-actions">
           <button type="button" class="btn btn-primary" data-action="checkout">

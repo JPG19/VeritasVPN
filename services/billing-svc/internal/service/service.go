@@ -352,6 +352,7 @@ func (s *BillingService) expireOne(ctx context.Context, sub *model.Subscription)
 	}
 	s.publishEvent("subscription.expired", map[string]interface{}{
 		"account_id": sub.AccountID,
+		"tier":       model.TierFree,
 	})
 	return nil
 }

@@ -114,6 +114,11 @@ async function refreshTokenSilently() {
   }
 }
 
+/** Force a refresh so JWT tier matches billing after Premium purchase. */
+export async function forceRefreshAccessToken() {
+  return refreshTokenSilently();
+}
+
 function notifyListeners(user) {
   authReady = true;
   listeners.forEach((fn) => fn(user));

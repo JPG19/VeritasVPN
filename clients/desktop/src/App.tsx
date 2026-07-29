@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   getStoredUser,
   getStoredToken,
+  refreshSession,
   signIn as doSignIn,
   signUp as doSignUp,
   signInWithAccountId as doSignInAccountId,
@@ -125,6 +126,7 @@ function App() {
 
   const handleConnect = useCallback(async () => {
     setStatusMsg("");
+    await refreshSession();
     const token = getStoredToken();
     if (!token) {
       setStatusMsg("Not signed in");
@@ -147,8 +149,14 @@ function App() {
         },
         body: JSON.stringify({ public_key: keys.public_key }),
       });
-      const peer = (await res.json()) as PeerResponse;
+      const peer = (await res.json()) as PeerResponse & { code?: string };
       if (!res.ok) {
+        if (peer.code?.startsWith("plan_device_limit")) {
+          throw new Error(
+            peer.error ||
+              "Device limit reached. Upgrade to Premium for more devices, or disconnect another device first."
+          );
+        }
         throw new Error(peer.error || "Failed to create WireGuard peer");
       }
 

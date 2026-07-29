@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -160,10 +161,40 @@ func (c *Config) AllowedCORSOrigins() []string {
 	return out
 }
 
-// UseMockBTCPay returns true when BTCPay is not configured and we are not in production.
+// UseMockBTCPay returns true only when explicitly allowed for local/dev
+// (ALLOW_MOCK_BTCPAY=true) and real BTCPay credentials are missing.
+// Production never uses mock. Public deployments must leave ALLOW_MOCK_BTCPAY unset.
 func (c *Config) UseMockBTCPay() bool {
 	if c.IsProduction() {
 		return false
 	}
+	if strings.ToLower(os.Getenv("ALLOW_MOCK_BTCPAY")) != "true" {
+		return false
+	}
 	return c.BTCPayAPIKey == "" || c.BTCPayServerURL == "" || strings.Contains(c.BTCPayServerURL, "btcpay:49392")
+}
+
+// RequireBTCPayProduction validates that production billing has real BTCPay credentials
+// and a webhook secret. Call from billing-svc main before serving.
+func (c *Config) RequireBTCPayProduction() error {
+	if !c.IsProduction() {
+		return nil
+	}
+	missing := make([]string, 0, 4)
+	if c.BTCPayServerURL == "" || strings.Contains(c.BTCPayServerURL, "btcpay:49392") {
+		missing = append(missing, "BTCPAY_SERVER_URL")
+	}
+	if c.BTCPayAPIKey == "" {
+		missing = append(missing, "BTCPAY_API_KEY")
+	}
+	if c.BTCPayStoreID == "" {
+		missing = append(missing, "BTCPAY_STORE_ID")
+	}
+	if c.BTCPayWebhookSecret == "" {
+		missing = append(missing, "BTCPAY_WEBHOOK_SECRET")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("production billing requires: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
