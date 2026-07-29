@@ -34,7 +34,7 @@ Forward **UDP 51820** on the router for remote clients.
 
 ## Desktop
 
-Connect uses WireGuard against the node. If `wg`/`wg-quick` are missing, it falls back to SOCKS.
+Connect uses WireGuard against the node (bundled wireguard-go on macOS desktop, or `wg-quick` on CLI). If the WireGuard engine is missing from the desktop bundle, it falls back to SOCKS.
 
 ## CLI
 

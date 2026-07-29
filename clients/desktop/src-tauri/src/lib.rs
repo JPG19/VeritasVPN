@@ -22,6 +22,8 @@ pub struct WgTunnelConfig {
     pub endpoint: String,
     pub allowed_ips: Vec<String>,
     pub peer_id: String,
+    #[serde(default)]
+    pub preshared_key: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -187,6 +189,10 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
     let mut uapi = format!(
         "set=1\nprivate_key={priv_hex}\nreplace_peers=true\npublic_key={pub_hex}\nendpoint={endpoint}\npersistent_keepalive_interval=25\n"
     );
+    if !config.preshared_key.trim().is_empty() {
+        let psk_hex = b64_key_to_hex(&config.preshared_key)?;
+        uapi.push_str(&format!("preshared_key={psk_hex}\n"));
+    }
     for ip in &allowed {
         uapi.push_str(&format!("allowed_ip={}\n", ip.trim()));
     }

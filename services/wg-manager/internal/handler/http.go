@@ -39,6 +39,7 @@ func (h *HTTPHandler) Routes() http.Handler {
 	mux.HandleFunc("/api/v1/agents/register", h.handleAgentRegister)
 	mux.HandleFunc("/api/v1/agents/heartbeat", h.handleAgentHeartbeat)
 	mux.HandleFunc("/api/v1/agents/peers/stream", h.handlePeerStream)
+	mux.HandleFunc("/api/v1/agents/peers/applied", h.handlePeerApplied)
 	mux.HandleFunc("/api/v1/wg/peers", h.handlePeers)
 	mux.HandleFunc("/api/v1/wg/peers/", h.handlePeerByID)
 	mux.HandleFunc("/api/v1/wg/servers", h.handleListServers)
@@ -169,6 +170,7 @@ func (h *HTTPHandler) handlePeerStream(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	// Catch-up: push existing peers so a reconnecting agent is consistent.
+	// Peers stay pending until the agent applies them and calls /peers/applied.
 	peers, err := h.svc.ListPeersForServer(r.Context(), serverID)
 	if err != nil {
 		h.log.Warn("failed listing peers for stream catch-up", "server_id", serverID, "error", err)
@@ -191,7 +193,6 @@ func (h *HTTPHandler) handlePeerStream(w http.ResponseWriter, r *http.Request) {
 			}
 			_, _ = w.Write(line)
 			flusher.Flush()
-			_ = h.svc.MarkPeerActive(r.Context(), p.ID)
 		}
 	}
 
@@ -221,11 +222,43 @@ func (h *HTTPHandler) handlePeerStream(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			flusher.Flush()
-			if update.Action == "ADD" {
-				_ = h.svc.MarkPeerActive(r.Context(), update.PeerID)
-			}
 		}
 	}
+}
+
+type peerAppliedRequest struct {
+	PeerID   string `json:"peer_id"`
+	ServerID string `json:"server_id"`
+}
+
+func (h *HTTPHandler) handlePeerApplied(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	token := extractBearer(r)
+	if token == "" || token != h.authToken {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var req peerAppliedRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	if req.PeerID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "peer_id is required"})
+		return
+	}
+
+	if err := h.svc.MarkPeerActive(r.Context(), req.PeerID); err != nil {
+		h.log.Warn("mark peer active failed", "peer_id", req.PeerID, "error", err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type createPeerRequest struct {
@@ -264,15 +297,16 @@ func (h *HTTPHandler) handlePeers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"peer_id":           cfg.PeerID,
-			"server_id":         cfg.ServerID,
-			"server_hostname":   cfg.ServerHostname,
-			"server_public_key": cfg.ServerPublicKey,
-			"server_endpoint":   cfg.ServerEndpoint,
-			"assigned_ip":       cfg.AssignedIP,
-			"address":           cfg.AssignedIP,
-			"dns_server":        cfg.DNSServer,
-			"allowed_ips":       cfg.ClientAllowedIPs,
+			"peer_id":            cfg.PeerID,
+			"server_id":          cfg.ServerID,
+			"server_hostname":    cfg.ServerHostname,
+			"server_public_key":  cfg.ServerPublicKey,
+			"server_endpoint":    cfg.ServerEndpoint,
+			"assigned_ip":        cfg.AssignedIP,
+			"address":            cfg.AssignedIP,
+			"dns_server":         cfg.DNSServer,
+			"preshared_key":      cfg.PresharedKey,
+			"allowed_ips":        cfg.ClientAllowedIPs,
 			"client_allowed_ips": cfg.ClientAllowedIPs,
 		})
 	case http.MethodGet:

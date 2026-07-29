@@ -28,5 +28,7 @@ SOCKS (`veritas-proxy` :1080) remains for the Chrome extension only. Desktop/CLI
 
 - Bootstrap creates/adopts `wg0`, persists `/etc/wireguard/private.key`, enables IP forward + MASQUERADE.
 - Agent runs `network_mode: host` with `NET_ADMIN`, talks to `MANAGER_ENDPOINT=http://127.0.0.1:8082`.
-- Peer provisioning: `POST /api/v1/wg/peers` (JWT) → SSE to agent → `wgctrl` AddPeer.
+- Peer provisioning: `POST /api/v1/wg/peers` (JWT) → SSE to agent → `wgctrl` AddPeer →
+  `POST /api/v1/agents/peers/applied` marks peer `active`. Create responses include `preshared_key`.
 - Do not put WireGuard on the Mac as the server; Mac is a client only.
+- Run only one agent (compose **or** a host binary). Two agents fight over `wg0` and `:9090`.

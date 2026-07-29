@@ -67,6 +67,7 @@ type AgentManagerClient interface {
 	RegisterServer(ctx context.Context, req *RegisterServerRequest) (*RegisterServerResponse, error)
 	SendHeartbeat(ctx context.Context, req *HeartbeatRequest) error
 	StreamPeerUpdates(ctx context.Context, serverID, authToken string) (<-chan *PeerUpdate, <-chan error)
+	ReportPeerApplied(ctx context.Context, serverID, peerID, authToken string) error
 }
 
 type httpAgentClient struct {
@@ -207,6 +208,35 @@ func (c *httpAgentClient) StreamPeerUpdates(ctx context.Context, serverID, authT
 	}()
 
 	return updateCh, errCh
+}
+
+func (c *httpAgentClient) ReportPeerApplied(ctx context.Context, serverID, peerID, authToken string) error {
+	body, err := json.Marshal(map[string]string{
+		"server_id": serverID,
+		"peer_id":   peerID,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal applied request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/v1/agents/peers/applied", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create applied request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+authToken)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("applied request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("applied returned %d: %s", resp.StatusCode, string(data))
+	}
+	return nil
 }
 
 func urlQueryEscape(s string) string {
@@ -573,6 +603,12 @@ func (a *Agent) handlePeerUpdate(update *PeerUpdate) {
 			return
 		}
 		a.logger.Info("Peer added", zap.String("peer_id", update.PeerID))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := a.managerClient.ReportPeerApplied(ctx, a.serverID, update.PeerID, a.cfg.AuthToken); err != nil {
+			a.logger.Warn("Failed to report peer applied",
+				zap.String("peer_id", update.PeerID), zap.Error(err))
+		}
 	case "REMOVE":
 		if err := a.peerManager.RemovePeer(update.PublicKey); err != nil {
 			a.logger.Error("Failed to remove peer",

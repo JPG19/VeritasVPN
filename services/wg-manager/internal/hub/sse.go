@@ -59,7 +59,9 @@ func (h *Hub) Subscribe(serverID string) (<-chan PeerUpdate, func()) {
 	return sub.ch, unsubscribe
 }
 
-func (h *Hub) Publish(serverID string, update PeerUpdate) {
+// Publish fans an update to subscribers. Returns false when no agent is
+// connected (or every subscriber channel is full).
+func (h *Hub) Publish(serverID string, update PeerUpdate) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -70,12 +72,14 @@ func (h *Hub) Publish(serverID string, update PeerUpdate) {
 			"action", update.Action,
 			"peer_id", update.PeerID,
 		)
-		return
+		return false
 	}
 
+	delivered := false
 	for sub := range set {
 		select {
 		case sub.ch <- update:
+			delivered = true
 		default:
 			h.log.Warn("dropping peer update; subscriber slow",
 				"server_id", serverID,
@@ -83,6 +87,7 @@ func (h *Hub) Publish(serverID string, update PeerUpdate) {
 			)
 		}
 	}
+	return delivered
 }
 
 // EncodeSSE formats a peer update as an SSE data line.

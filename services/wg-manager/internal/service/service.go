@@ -24,6 +24,7 @@ type PeerConfig struct {
 	ServerEndpoint   string
 	AssignedIP       string
 	DNSServer        string
+	PresharedKey     string
 	AllowedIPs       []string // server-side peer AllowedIPs (client /32)
 	ClientAllowedIPs []string // client tunnel AllowedIPs (full tunnel)
 }
@@ -214,14 +215,21 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, pr
 		return nil, fmt.Errorf("allocate ip: %w", err)
 	}
 
+	psk, err := generatePSK()
+	if err != nil {
+		_ = s.redis.ReleaseIP(ctx, srv.ID, assignedIP)
+		return nil, err
+	}
+
 	peer := &model.Peer{
-		AccountID:  accountID,
-		ServerID:   srv.ID,
-		Pubkey:     publicKey,
-		AllowedIPs: []string{assignedIP},
-		AssignedIP: assignedIP,
-		Status:     "pending",
-		CreatedAt:  time.Now(),
+		AccountID:    accountID,
+		ServerID:     srv.ID,
+		Pubkey:       publicKey,
+		PresharedKey: &psk,
+		AllowedIPs:   []string{assignedIP},
+		AssignedIP:   assignedIP,
+		Status:       "pending",
+		CreatedAt:    time.Now(),
 	}
 
 	if err := s.postgres.CreatePeer(ctx, peer); err != nil {
@@ -232,6 +240,8 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, pr
 	endpoint := fmt.Sprintf("%s:%d", srv.PublicIP, srv.WGPort)
 	serverID := srv.ID
 
+	// Notify the agent asynchronously. Peer stays "pending" until the agent
+	// applies the peer and POSTs /api/v1/agents/peers/applied.
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -241,10 +251,6 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, pr
 				"server_id", serverID,
 				"error", err.Error(),
 			)
-			return
-		}
-		if err := s.postgres.UpdatePeerStatus(bgCtx, peer.ID, "active"); err != nil {
-			s.log.Warn("failed to mark peer active", "peer_id", peer.ID, "error", err)
 		}
 	}()
 
@@ -271,6 +277,7 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, pr
 		ServerEndpoint:   endpoint,
 		AssignedIP:       assignedIP,
 		DNSServer:        srv.DNSServer,
+		PresharedKey:     psk,
 		AllowedIPs:       []string{assignedIP},
 		ClientAllowedIPs: []string{"0.0.0.0/0", "::/0"},
 	}, nil
