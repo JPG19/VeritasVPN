@@ -114,12 +114,12 @@ func (h *BillingHandler) handleSubscribe(w http.ResponseWriter, r *http.Request)
 	if req.PaymentMethod == "" {
 		req.PaymentMethod = "btcpay"
 	}
-	if req.PaymentMethod != "btcpay" {
-		writeError(w, http.StatusBadRequest, "only bitcoin (btcpay) payments are supported")
+	if req.PaymentMethod != "btcpay" && req.PaymentMethod != "btcpay_xmr" {
+		writeError(w, http.StatusBadRequest, "only bitcoin (btcpay) and monero (btcpay_xmr) payments are supported")
 		return
 	}
 
-	checkoutURL, err := h.service.CreatePremiumCheckout(r.Context(), uid)
+	checkoutURL, err := h.service.CreatePremiumCheckout(r.Context(), uid, req.PaymentMethod)
 	if err != nil {
 		h.log.Error("failed to create checkout", zap.Error(err))
 		writeError(w, http.StatusBadRequest, err.Error())

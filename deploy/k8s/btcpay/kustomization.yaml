@@ -10,3 +10,5 @@ resources:
   - bitcoind.yaml
   - nbxplorer.yaml
   - btcpayserver.yaml
+  - monerod.yaml
+  - monero-wallet-rpc.yaml
