@@ -6,6 +6,23 @@ namespace: veritas
 resources:
   - ../../base
 
+images:
+  - name: localhost:31500/auth-svc
+    newName: ghcr.io/jpg19/veritasvpn/auth-svc
+    newTag: latest
+  - name: localhost:31500/wg-manager
+    newName: ghcr.io/jpg19/veritasvpn/wg-manager
+    newTag: latest
+  - name: localhost:31500/billing-svc
+    newName: ghcr.io/jpg19/veritasvpn/billing-svc
+    newTag: latest
+  - name: localhost:31500/veritas-agent
+    newName: ghcr.io/jpg19/veritasvpn/veritas-agent
+    newTag: latest
+  - name: localhost:31500/veritas-proxy
+    newName: ghcr.io/jpg19/veritasvpn/veritas-proxy
+    newTag: latest
+
 patches:
   - target:
       kind: ConfigMap
