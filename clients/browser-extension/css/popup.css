@@ -140,6 +140,14 @@ input, select {
   font-size: 12px;
 }
 
+.auth-alt {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin: 10px 0 4px;
+  text-decoration: underline;
+}
+
 .power { text-align: center; margin-bottom: 16px; }
 
 .power-btn {

@@ -44,7 +44,7 @@
         <section class="downloads-hero">
             <div class="container">
                 <h1>VeritasVPN for macOS</h1>
-                <p>Native Tauri desktop app — sets system-wide SOCKS5 proxy. Apple silicon &amp; Intel.</p>
+                <p>Native Tauri desktop app — WireGuard VPN (SOCKS only as fallback). Apple silicon.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
                     <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-macos.dmg" download>Download for Mac</a>
                     <a class="btn btn-outline btn-lg" href="/install/chrome.html">Use Chrome meanwhile</a>
@@ -58,18 +58,20 @@
                 <ol class="install-list">
                     <li>
                         <strong>Download the .dmg</strong>
-                        <p>Click the button above — built by CI on every version tag. Apple silicon (M-series) only for now.</p>
+                        <p>Click the button above — Apple silicon (M-series) for now.</p>
                     </li>
                     <li>
                         <strong>Install</strong>
                         <p>Open the .dmg, drag VeritasVPN to your Applications folder.</p>
                     </li>
                     <li>
-                        <strong>First launch</strong>
-                        <p>Right-click the app and select Open (to bypass Gatekeeper for now). Then sign in and hit Connect.</p>
+                        <strong>Clear Gatekeeper quarantine (required until notarized)</strong>
+                        <p>macOS may say the app is “damaged” and tell you to move it to the Trash. That is a quarantine warning on an unsigned build — the file is fine. In Terminal run:</p>
+                        <pre style="text-align:left;background:rgba(0,0,0,.35);padding:12px 16px;border-radius:8px;overflow:auto;font-size:13px;margin-top:10px;"><code>xattr -cr /Applications/VeritasVPN.app</code></pre>
+                        <p style="margin-top:10px;">Then open VeritasVPN from Applications, sign in, and hit Connect.</p>
                     </li>
                 </ol>
-                <p class="downloads-note">Notarization coming soon. Intel Mac build on the way. Until then, right-click → Open to launch.</p>
+                <p class="downloads-note">Apple notarization / Developer ID signing is not set up yet. Until then, the <code>xattr</code> step above is required after every download. Intel Mac build on the way.</p>
             </div>
         </section>
     </main>

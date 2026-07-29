@@ -24,17 +24,27 @@
         <button type="button" class="tab" data-mode="signup">Sign up</button>
       </div>
       <form id="authForm">
-        <label>
-          Email
-          <input type="email" id="email" required autocomplete="username" placeholder="you@example.com">
-        </label>
-        <label>
-          Password
-          <input type="password" id="password" required autocomplete="current-password" minlength="6" placeholder="••••••••">
-        </label>
+        <div id="emailFields">
+          <label>
+            Email
+            <input type="email" id="email" autocomplete="username" placeholder="you@example.com">
+          </label>
+          <label>
+            Password
+            <input type="password" id="password" autocomplete="current-password" minlength="6" placeholder="••••••••">
+          </label>
+        </div>
+        <div id="accountIdFields" hidden>
+          <label>
+            Account ID
+            <input type="text" id="accountId" autocomplete="off" spellcheck="false" placeholder="Your account ID">
+          </label>
+        </div>
+        <p id="anonHint" class="hint" hidden>Creates an anonymous account. You’ll get an Account ID to save — no email required.</p>
         <button type="submit" class="btn primary" id="authSubmit">Sign in</button>
       </form>
-      <p class="hint">Use the same account as <a href="http://localhost:8000" target="_blank" rel="noopener">veritasvpn.com</a>.</p>
+      <button type="button" class="linkish auth-alt" id="authMethodToggle">Sign in with Account ID instead</button>
+      <p class="hint">Use the same account as <a href="https://veritasvpn.cloud" target="_blank" rel="noopener">veritasvpn.cloud</a>.</p>
     </section>
 
     <section id="mainView" class="view" hidden>
