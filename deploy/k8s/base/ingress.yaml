@@ -7,7 +7,8 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600s"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600s"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Tunnel origin is plain HTTP; edge already serves HTTPS to clients.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   rules:
