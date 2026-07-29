@@ -96,13 +96,13 @@ function renderHome() {
           ${
             premium
               ? `
-            <div class="plan-limit">All locations</div>
-            <div class="plan-limit">5 devices</div>
-            <div class="plan-limit">Unlimited data</div>`
+            <div class="plan-limit">Current network</div>
+            <div class="plan-limit">Premium support</div>
+            <div class="plan-limit">Bitcoin billing</div>`
               : `
-            <div class="plan-limit">5 locations</div>
-            <div class="plan-limit">1 device</div>
-            <div class="plan-limit">2 GB / month</div>`
+            <div class="plan-limit">Current network</div>
+            <div class="plan-limit">WireGuard + Chrome</div>
+            <div class="plan-limit">Beta fair-use</div>`
           }
         </div>
       </div>
@@ -126,12 +126,10 @@ function renderHome() {
           <p class="plan-card-meta" style="margin-top:8px;">Bitcoin via BTCPay · 30-day period</p>
         </div>
         <ul class="upgrade-features">
-          <li>All server locations</li>
-          <li>Unlimited data</li>
-          <li>5 devices at once</li>
-          <li>Ad &amp; tracker blocking DNS</li>
-          <li>Multi-hop routing</li>
-          <li>Kill switch on all platforms</li>
+          <li>Access to the current network</li>
+          <li>Pay with Bitcoin (no card)</li>
+          <li>Priority support while we expand</li>
+          <li>More locations &amp; features on the roadmap</li>
         </ul>
         <div class="account-actions">
           <button type="button" class="btn btn-primary" data-action="checkout">
@@ -254,9 +252,10 @@ function renderSecurity() {
       <div class="account-card">
         <ul class="upgrade-features">
           <li>WireGuard-only protocol</li>
-          <li>No-logs policy — open-source clients &amp; infra</li>
+          <li>No traffic logs — see Privacy Policy for operational data</li>
           <li>Premium paid with Bitcoin (no card required)</li>
-          <li>Diskless / RAM-oriented server design (roadmap)</li>
+          <li>Diskless / RAM-oriented servers (roadmap)</li>
+          <li><a href="/canary.txt">Warrant canary</a> · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a></li>
         </ul>
         <div class="account-actions">
           <a class="btn btn-outline" href="/#transparency">Transparency</a>
