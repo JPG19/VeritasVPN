@@ -19,8 +19,9 @@ const STORAGE_KEYS = {
 };
 
 export interface User {
-  email: string;
+  email?: string;
   account_id: string;
+  is_anonymous?: boolean;
 }
 
 function humanizeError(msg: string): string {
@@ -31,18 +32,21 @@ function humanizeError(msg: string): string {
     return "Incorrect email or password.";
   }
   if (m.includes("already exists")) return "An account with this email already exists.";
+  if (m.includes("account") && (m.includes("invalid") || m.includes("not found") || m.includes("id"))) {
+    return "Account ID not found.";
+  }
   return msg;
 }
 
 async function authAPI(
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown> | string = {}
 ): Promise<AuthResponse> {
   const url = `${AUTH_API}${path}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: typeof body === "string" ? body : JSON.stringify(body),
   });
   const data = await res.json();
   if (!res.ok) {
@@ -50,6 +54,13 @@ async function authAPI(
     throw new Error(humanizeError(err?.error || "Authentication failed"));
   }
   return data as AuthResponse;
+}
+
+function persistSession(user: User, data: AuthResponse): User {
+  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
+  localStorage.setItem(STORAGE_KEYS.accessToken, data.access_token);
+  localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
+  return user;
 }
 
 export function getStoredUser(): User | null {
@@ -74,11 +85,10 @@ export async function signIn(
     email,
     password,
   });
-  const user: User = { email: data.email || email, account_id: data.account_id };
-  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
-  localStorage.setItem(STORAGE_KEYS.accessToken, data.access_token);
-  localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
-  return user;
+  return persistSession(
+    { email: data.email || email, account_id: data.account_id },
+    data
+  );
 }
 
 export async function signUp(
@@ -89,11 +99,29 @@ export async function signUp(
     email,
     password,
   });
-  const user: User = { email: email, account_id: data.account_id };
-  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
-  localStorage.setItem(STORAGE_KEYS.accessToken, data.access_token);
-  localStorage.setItem(STORAGE_KEYS.refreshToken, data.refresh_token);
-  return user;
+  return persistSession({ email, account_id: data.account_id }, data);
+}
+
+/** Sign in with an anonymous (or any) account ID — no password. */
+export async function signInWithAccountId(accountId: string): Promise<User> {
+  const id = accountId.trim();
+  if (!id) throw new Error("Enter your account ID.");
+  const data = await authAPI("/api/v1/auth/signin-account", {
+    account_id: id,
+  });
+  return persistSession(
+    { account_id: data.account_id, is_anonymous: true },
+    data
+  );
+}
+
+/** Create an anonymous account; caller must show `account_id` to the user once. */
+export async function registerAnonymous(): Promise<User> {
+  const data = await authAPI("/api/v1/auth/register-anonymous", "{}");
+  return persistSession(
+    { account_id: data.account_id, is_anonymous: true },
+    data
+  );
 }
 
 export function signOut(): void {

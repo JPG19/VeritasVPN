@@ -5,6 +5,8 @@ import {
   getStoredToken,
   signIn as doSignIn,
   signUp as doSignUp,
+  signInWithAccountId as doSignInAccountId,
+  registerAnonymous as doRegisterAnonymous,
   signOut as doSignOut,
   type User,
 } from "./auth";
@@ -12,6 +14,8 @@ import { AUTH_API, DEFAULT_PROXY } from "./config";
 import "./App.css";
 
 type AuthMode = "signin" | "signup";
+/** Email/password vs Account ID (anonymous) path. */
+type AuthMethod = "email" | "accountId";
 type TunnelMode = "wireguard" | "socks" | "";
 
 interface ConnectResult {
@@ -40,8 +44,11 @@ interface PeerResponse {
 function App() {
   const [user, setUser] = useState<User | null>(getStoredUser);
   const [mode, setMode] = useState<AuthMode>("signin");
+  const [method, setMethod] = useState<AuthMethod>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [newAccountId, setNewAccountId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -55,24 +62,49 @@ function App() {
     return () => clearTimeout(t);
   }, [statusMsg]);
 
+  const switchMode = useCallback((next: AuthMode) => {
+    setMode(next);
+    setMethod("email");
+    setError("");
+    setNewAccountId("");
+  }, []);
+
+  const switchMethod = useCallback((next: AuthMethod) => {
+    setMethod(next);
+    setError("");
+    setNewAccountId("");
+  }, []);
+
   const handleAuth = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
       setError("");
       setLoading(true);
       try {
-        const fn = mode === "signin" ? doSignIn : doSignUp;
-        const u = await fn(email, password);
-        setUser(u);
-        setEmail("");
-        setPassword("");
+        if (method === "accountId") {
+          if (mode === "signin") {
+            const u = await doSignInAccountId(accountId);
+            setUser(u);
+            setAccountId("");
+          } else {
+            const u = await doRegisterAnonymous();
+            setNewAccountId(u.account_id);
+            setUser(u);
+          }
+        } else {
+          const fn = mode === "signin" ? doSignIn : doSignUp;
+          const u = await fn(email, password);
+          setUser(u);
+          setEmail("");
+          setPassword("");
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Auth failed");
       } finally {
         setLoading(false);
       }
     },
-    [email, password, mode]
+    [email, password, accountId, mode, method]
   );
 
   const connectSocksFallback = useCallback(async (reason: string) => {
@@ -185,54 +217,124 @@ function App() {
     }
     doSignOut();
     setUser(null);
+    setNewAccountId("");
   }, [connected, handleDisconnect]);
 
-  if (!user) {
+  if (!user || (newAccountId && method === "accountId" && mode === "signup")) {
+    const showingNewId = Boolean(newAccountId);
     return (
       <div className="app">
         <div className="brand">
           <h1>Veritas<span>VPN</span></h1>
           <p>Privacy is truth.</p>
         </div>
-        <div className="auth-tabs">
-          <button
-            className={mode === "signin" ? "active" : ""}
-            onClick={() => { setMode("signin"); setError(""); }}
-          >
-            Sign in
-          </button>
-          <button
-            className={mode === "signup" ? "active" : ""}
-            onClick={() => { setMode("signup"); setError(""); }}
-          >
-            Sign up
-          </button>
-        </div>
+        {!showingNewId && (
+          <div className="auth-tabs">
+            <button
+              className={mode === "signin" ? "active" : ""}
+              onClick={() => switchMode("signin")}
+              type="button"
+            >
+              Sign in
+            </button>
+            <button
+              className={mode === "signup" ? "active" : ""}
+              onClick={() => switchMode("signup")}
+              type="button"
+            >
+              Sign up
+            </button>
+          </div>
+        )}
         <form onSubmit={handleAuth}>
           {error && <div className="error">{error}</div>}
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
-          <button type="submit" disabled={loading} className="btn-primary">
-            {loading
-              ? "Please wait..."
-              : mode === "signin"
-                ? "Sign in"
-                : "Create account"}
-          </button>
+          {showingNewId ? (
+            <>
+              <p className="auth-hint success">
+                Your Account ID (copy it now — it cannot be recovered):
+              </p>
+              <code className="account-id-display">{newAccountId}</code>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  setNewAccountId("");
+                }}
+              >
+                Continue
+              </button>
+            </>
+          ) : method === "email" ? (
+            <>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              />
+              <button type="submit" disabled={loading} className="btn-primary">
+                {loading
+                  ? "Please wait..."
+                  : mode === "signin"
+                    ? "Sign in"
+                    : "Create account"}
+              </button>
+            </>
+          ) : mode === "signin" ? (
+            <>
+              <input
+                type="text"
+                placeholder="Account ID"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                required
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button type="submit" disabled={loading} className="btn-primary">
+                {loading ? "Please wait..." : "Sign in with Account ID"}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="auth-hint">
+                Creates an anonymous account. You’ll get an Account ID to save —
+                no email required.
+              </p>
+              <button type="submit" disabled={loading} className="btn-primary">
+                {loading ? "Please wait..." : "Create anonymous account"}
+              </button>
+            </>
+          )}
         </form>
+        {!showingNewId && (
+          <button
+            type="button"
+            className="auth-switch-link"
+            onClick={() =>
+              switchMethod(method === "email" ? "accountId" : "email")
+            }
+          >
+            {method === "email"
+              ? mode === "signin"
+                ? "Sign in with Account ID instead"
+                : "Skip email — create anonymous account"
+              : mode === "signin"
+                ? "Sign in with email instead"
+                : "Use email instead"}
+          </button>
+        )}
       </div>
     );
   }
@@ -241,7 +343,12 @@ function App() {
     <div className="app">
       <div className="brand">
         <h1>Veritas<span>VPN</span></h1>
-        <p className="user-email">{user.email}</p>
+        <p className="user-email">
+          {user.email || user.account_id}
+        </p>
+        {user.email && user.account_id && (
+          <p className="user-account-id">ID: {user.account_id}</p>
+        )}
       </div>
       <div className="status-badge">
         <span className={`dot ${connected ? "on" : "off"}`} />

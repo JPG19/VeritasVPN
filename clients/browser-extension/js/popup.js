@@ -2,6 +2,8 @@ import {
   getSession,
   signIn,
   signUp,
+  signInWithAccountId,
+  registerAnonymous,
   signOut,
   connect,
   disconnect,
@@ -13,6 +15,13 @@ const authView = document.getElementById('authView');
 const mainView = document.getElementById('mainView');
 const authForm = document.getElementById('authForm');
 const authSubmit = document.getElementById('authSubmit');
+const authMethodToggle = document.getElementById('authMethodToggle');
+const emailFields = document.getElementById('emailFields');
+const accountIdFields = document.getElementById('accountIdFields');
+const anonHint = document.getElementById('anonHint');
+const emailInput = document.getElementById('email');
+const passwordInput = document.getElementById('password');
+const accountIdInput = document.getElementById('accountId');
 const statusBanner = document.getElementById('statusBanner');
 const userEmail = document.getElementById('userEmail');
 const toggleBtn = document.getElementById('toggleBtn');
@@ -25,6 +34,7 @@ const proxyPort = document.getElementById('proxyPort');
 const saveProxyBtn = document.getElementById('saveProxyBtn');
 
 let mode = 'signin';
+let method = 'email'; // 'email' | 'accountId'
 
 function showBanner(message, isError = false) {
   if (!message) {
@@ -37,16 +47,48 @@ function showBanner(message, isError = false) {
   statusBanner.classList.toggle('error', isError);
 }
 
+function syncAuthFields() {
+  const useEmail = method === 'email';
+  emailFields.hidden = !useEmail;
+  accountIdFields.hidden = !(method === 'accountId' && mode === 'signin');
+  anonHint.hidden = !(method === 'accountId' && mode === 'signup');
+
+  emailInput.required = useEmail;
+  passwordInput.required = useEmail;
+  accountIdInput.required = method === 'accountId' && mode === 'signin';
+
+  if (method === 'email') {
+    authSubmit.textContent = mode === 'signin' ? 'Sign in' : 'Create account';
+    authMethodToggle.textContent =
+      mode === 'signin'
+        ? 'Sign in with Account ID instead'
+        : 'Skip email — create anonymous account';
+  } else if (mode === 'signin') {
+    authSubmit.textContent = 'Sign in with Account ID';
+    authMethodToggle.textContent = 'Sign in with email instead';
+  } else {
+    authSubmit.textContent = 'Create anonymous account';
+    authMethodToggle.textContent = 'Use email instead';
+  }
+}
+
 function setMode(next) {
   mode = next;
+  method = 'email';
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.classList.toggle('is-active', tab.dataset.mode === mode);
   });
-  authSubmit.textContent = mode === 'signin' ? 'Sign in' : 'Create account';
+  syncAuthFields();
 }
 
 document.querySelectorAll('.tab').forEach((tab) => {
   tab.addEventListener('click', () => setMode(tab.dataset.mode));
+});
+
+authMethodToggle.addEventListener('click', () => {
+  method = method === 'email' ? 'accountId' : 'email';
+  showBanner('');
+  syncAuthFields();
 });
 
 function renderConnected(connected, demo) {
@@ -67,6 +109,7 @@ async function refresh() {
     authView.hidden = false;
     mainView.hidden = true;
     renderConnected(false, false);
+    syncAuthFields();
     return;
   }
 
@@ -82,14 +125,19 @@ async function refresh() {
 authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   showBanner('');
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
   authSubmit.disabled = true;
   try {
-    if (mode === 'signin') {
-      await signIn(email, password);
+    if (method === 'accountId') {
+      if (mode === 'signin') {
+        await signInWithAccountId(accountIdInput.value);
+      } else {
+        const user = await registerAnonymous();
+        showBanner(`Account ID: ${user.account_id} — copy it now.`, false);
+      }
+    } else if (mode === 'signin') {
+      await signIn(emailInput.value.trim(), passwordInput.value);
     } else {
-      await signUp(email, password);
+      await signUp(emailInput.value.trim(), passwordInput.value);
     }
     await refresh();
   } catch (err) {
@@ -120,7 +168,6 @@ toggleBtn.addEventListener('click', async () => {
 
 signOutBtn.addEventListener('click', async () => {
   await signOut();
-  showBanner('');
   await refresh();
 });
 
@@ -131,12 +178,7 @@ saveProxyBtn.addEventListener('click', async () => {
     port: Number(proxyPort.value) || 1080,
   });
   showBanner('Proxy settings saved.');
-  const session = await getSession();
-  if (session.connected) {
-    await disconnect();
-    const result = await connect();
-    renderConnected(true, result.demo);
-  }
 });
 
+syncAuthFields();
 refresh();

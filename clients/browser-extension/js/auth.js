@@ -67,6 +67,9 @@ function humanizeError(msg) {
     return 'Incorrect email or password.';
   }
   if (m.includes('already exists')) return 'An account already exists with this email.';
+  if (m.includes('account') && (m.includes('invalid') || m.includes('not found') || m.includes('id'))) {
+    return 'Account ID not found.';
+  }
   return msg;
 }
 
@@ -90,6 +93,32 @@ export async function signUp(email, password) {
     password,
   });
   const user = { email: email, account_id: data.account_id };
+  await setStorage({
+    [STORAGE_KEYS.user]: user,
+    [STORAGE_KEYS.accessToken]: data.access_token,
+    [STORAGE_KEYS.refreshToken]: data.refresh_token,
+  });
+  return user;
+}
+
+export async function signInWithAccountId(accountId) {
+  const id = String(accountId || '').trim();
+  if (!id) throw new Error('Enter your account ID.');
+  const data = await authAPI('/api/v1/auth/signin-account', {
+    account_id: id,
+  });
+  const user = { account_id: data.account_id, is_anonymous: true };
+  await setStorage({
+    [STORAGE_KEYS.user]: user,
+    [STORAGE_KEYS.accessToken]: data.access_token,
+    [STORAGE_KEYS.refreshToken]: data.refresh_token,
+  });
+  return user;
+}
+
+export async function registerAnonymous() {
+  const data = await authAPI('/api/v1/auth/register-anonymous', {});
+  const user = { account_id: data.account_id, is_anonymous: true };
   await setStorage({
     [STORAGE_KEYS.user]: user,
     [STORAGE_KEYS.accessToken]: data.access_token,
