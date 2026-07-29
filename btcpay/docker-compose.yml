@@ -1,6 +1,6 @@
-# BTCPay Server — Bitcoin testnet deployment
+# BTCPay Server — Bitcoin + Monero testnet deployment
 # Run: docker compose -f btcpay/docker-compose.yml up -d
-# Switch to mainnet: change NETWORK=mainnet, BTC_PORT=8332, BTC_P2P=8333
+# Switch to mainnet: change NETWORK=mainnet, BTC_PORT=8332, BTC_P2P=8333, XMR stagenet→mainnet
 
 services:
   postgres-btcpay:
@@ -65,13 +65,60 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  monerod:
+    image: btcpayserver/monero:latest
+    command:
+      - monerod
+      - --non-interactive
+      - --prune-blockchain
+      - --rpc-bind-ip=0.0.0.0
+      - --rpc-bind-port=18081
+      - --confirm-external-bind
+      - --restricted-rpc
+      - --p2p-bind-ip=0.0.0.0
+      - --p2p-bind-port=18080
+      - --out-peers=16
+      - --in-peers=8
+      - --db-sync-mode=safe
+    volumes:
+      - btcpay_monero:/home/monero/.bitmonero
+    expose:
+      - "18081"
+    ports:
+      - "18080:18080"
+    restart: unless-stopped
+
+  monero-wallet-rpc:
+    image: btcpayserver/monero:latest
+    command:
+      - monero-wallet-rpc
+      - --non-interactive
+      - --daemon-address
+      - monerod:18081
+      - --wallet-dir
+      - /wallet
+      - --rpc-bind-port
+      - "18082"
+      - --rpc-bind-ip
+      - "0.0.0.0"
+      - --confirm-external-bind
+      - --disable-rpc-login
+      - --trusted-daemon
+    volumes:
+      - btcpay_monero_wallet:/wallet
+    expose:
+      - "18082"
+    depends_on:
+      - monerod
+    restart: unless-stopped
+
   btcpayserver:
     image: btcpayserver/btcpayserver:2.1.3
     environment:
       BTCPAY_NETWORK: ${BTC_NETWORK:-testnet}
       BTCPAY_POSTGRES: User ID=btcpay;Password=${BTCPAY_POSTGRES_PASSWORD:-change-me};Host=postgres-btcpay;Port=5432;Database=btcpay
       BTCPAY_BTCEXPLORERURL: http://nbxplorer:32838
-      BTCPAY_CHAINS: btc
+      BTCPAY_CHAINS: btc,xmr
       BTCPAY_BIND: 0.0.0.0:49392
       BTCPAY_EXTERNALURL: ${BTCPAY_EXTERNAL_URL:-http://localhost:49392}
       BTCPAY_CHECKREVOCATIONLIST: "false"
@@ -95,3 +142,5 @@ volumes:
   btcpay_pgdata:
   btcpay_bitcoind:
   btcpay_nbxplorer:
+  btcpay_monero:
+  btcpay_monero_wallet:

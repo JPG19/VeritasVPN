@@ -126,3 +126,8 @@ data:
     CREATE INDEX IF NOT EXISTS idx_subscriptions_period_end
         ON subscriptions(current_period_end)
         WHERE tier = 'premium' AND status = 'active';
+
+  006_billing_monero.sql: |
+    ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_payment_method_check;
+    ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_payment_method_check
+        CHECK (payment_method IN ('stripe', 'btcpay', 'btcpay_xmr', 'none'));

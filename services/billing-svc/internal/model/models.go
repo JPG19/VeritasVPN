@@ -11,9 +11,10 @@ const (
 	StatusPastDue  = "past_due"
 	StatusPending  = "pending"
 
-	PaymentNone   = "none"
-	PaymentBTCPay = "btcpay"
-	PaymentStripe = "stripe"
+	PaymentNone         = "none"
+	PaymentBTCPay       = "btcpay"
+	PaymentBTCPayMonero = "btcpay_xmr"
+	PaymentStripe       = "stripe"
 
 	PaymentPending   = "pending"
 	PaymentCompleted = "completed"
