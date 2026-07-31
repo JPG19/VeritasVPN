@@ -29,7 +29,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Import Apple certificate (if configured)
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        if: secrets.APPLE_CERTIFICATE != ''
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -45,7 +45,7 @@ jobs:
           security find-identity -v -p codesigning
 
       - name: Create notary key file (if configured)
-        if: ${{ secrets.APPLE_NOTARY_KEY != '' }}
+        if: secrets.APPLE_NOTARY_KEY != ''
         env:
           APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
