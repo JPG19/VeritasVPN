@@ -50,17 +50,14 @@ async function authAPI(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
+    const data = await res.json() as AuthResponse & AuthError;
     if (!res.ok) {
-      const err = data as AuthError;
-      throw new Error(humanizeError(err?.error || `Request failed (${res.status})`));
+      throw new Error(humanizeError(data.error || `Request failed (${res.status})`));
     }
-    return data as AuthResponse;
+    return data;
   } catch (e) {
-    if (e instanceof TypeError && e.message.includes("fetch")) {
-      throw new Error(`Network error — check internet and try again. (${e.message})`);
-    }
-    throw e;
+    const msg = e instanceof Error ? e.message : String(e ?? "Unknown error");
+    throw new Error(msg);
   }
 }
 
