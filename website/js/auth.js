@@ -238,8 +238,6 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
 
   if (googleBtn) googleBtn.remove();
 
-  let anonCreated = false;
-
   function setError(message, { success = false } = {}) {
     if (!errorEl) return;
     errorEl.innerHTML = message || '';
@@ -460,7 +458,6 @@ function renderUser(user) {
 
   tabs.forEach((tab) => {
     tab.addEventListener('click', () => {
-      anonCreated = false;
       if (mode.startsWith('anon-')) {
         setMode(tab.dataset.authTab === 'signup' ? 'anon-signup' : 'anon-signin');
       } else {
@@ -494,21 +491,6 @@ function renderUser(user) {
     setError('');
 
     if (mode === 'anon-signup') {
-      if (anonCreated) {
-        const accountId = submitBtn?.dataset.downloadAccount;
-        if (accountId) {
-          const blob = new Blob([`VeritasVPN Account ID\n\n${accountId}\n\nSave this file — it is the only way to recover your account.\n`], { type: 'text/plain' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'veritasvpn-account.txt';
-          a.click();
-          URL.revokeObjectURL(url);
-        }
-        closeModal();
-        enterDashboard();
-        return;
-      }
       setBusy(true);
       try {
         const data = await registerAnonymous();
@@ -516,15 +498,17 @@ function renderUser(user) {
         setSession(user, data.access_token, data.refresh_token);
         currentUser = user;
         updateNavbar(user);
-        anonCreated = true;
-        setMode('anon-signup');
-        const accountId = data.account_id;
-        setError(`Your account ID: <strong>${accountId}</strong><br><br>Click below to download it — no other way to recover it.`, { success: true });
-        if (submitBtn) {
-          submitBtn.textContent = 'Download account ID (.txt)';
-          submitBtn.className = 'btn btn-accent btn-block';
-          submitBtn.dataset.downloadAccount = accountId;
-        }
+
+        const blob = new Blob([`VeritasVPN Account ID\n\n${data.account_id}\n\nSave this file — it is the only way to recover your account.\n`], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        location.href = url;
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+        setError(`Account created. Account ID: <strong>${data.account_id}</strong> — check your downloads.`, { success: true });
+        setTimeout(() => {
+          closeModal();
+          enterDashboard();
+        }, 800);
       } catch (err) {
         setError(mapAuthError(err.message));
       } finally {
