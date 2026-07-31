@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Download VeritasVPN for macOS</title>
+    <meta name="description" content="VeritasVPN for macOS is planned but not currently offered for download.">
+    <title>VeritasVPN for macOS — Planned</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
@@ -43,35 +44,19 @@
     <main class="downloads-page">
         <section class="downloads-hero">
             <div class="container">
-                <h1>VeritasVPN for macOS</h1>
-                <p>Native Tauri desktop app — WireGuard VPN (SOCKS only as fallback). Apple silicon.</p>
+                <h1>macOS is not available yet</h1>
+                <p>We are waiting until the app can be distributed properly under Apple’s signing and notarization requirements.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
-                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-macos.dmg" download>Download for Mac</a>
-                    <a class="btn btn-outline btn-lg" href="/install/chrome.html">Use Chrome meanwhile</a>
+                    <a class="btn btn-primary btn-lg" href="/install/chrome.html">Use Chrome on macOS</a>
+                    <a class="btn btn-outline btn-lg" href="/downloads.html">View available platforms</a>
                 </div>
             </div>
         </section>
 
         <section class="downloads">
             <div class="container install-steps">
-                <h2>Install in 3 steps</h2>
-                <ol class="install-list">
-                    <li>
-                        <strong>Download the .dmg</strong>
-                        <p>Click the button above — Apple silicon (M-series) for now.</p>
-                    </li>
-                    <li>
-                        <strong>Install</strong>
-                        <p>Open the .dmg, drag VeritasVPN to your Applications folder.</p>
-                    </li>
-                    <li>
-                        <strong>Clear Gatekeeper quarantine (required until notarized)</strong>
-                        <p>macOS may say the app is “damaged” and tell you to move it to the Trash. That is a quarantine warning on an unsigned build — the file is fine. In Terminal run:</p>
-                        <pre style="text-align:left;background:rgba(0,0,0,.35);padding:12px 16px;border-radius:8px;overflow:auto;font-size:13px;margin-top:10px;"><code>xattr -cr /Applications/VeritasVPN.app</code></pre>
-                        <p style="margin-top:10px;">Then open VeritasVPN from Applications, sign in, and hit Connect.</p>
-                    </li>
-                </ol>
-                <p class="downloads-note">Apple notarization / Developer ID signing is not set up yet. Until then, the <code>xattr</code> step above is required after every download. Intel Mac build on the way.</p>
+                <h2>Why there is no download</h2>
+                <p class="downloads-note">VeritasVPN does not currently have the Apple distribution credentials needed to sign and notarize a public macOS build. We will not ask customers to bypass Gatekeeper or present an unsigned build as production-ready.</p>
             </div>
         </section>
     </main>
@@ -103,6 +88,6 @@
             <button type="button" class="auth-switch" id="authSwitchHint">Don't have an account? Sign up</button>
         </div>
     </div>
-    <script type="module" src="../js/main.js"></script>
+    <script type="module" src="../js/main.js?v=brand3"></script>
 </body>
 </html>
