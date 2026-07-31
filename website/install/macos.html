@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VeritasVPN for macOS is planned but not currently offered for download.">
+    <meta name="description" content="VeritasVPN for macOS. Apple Silicon build (M1/M2/M3).">
     <title>VeritasVPN for macOS — Planned</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,10 +44,10 @@
     <main class="downloads-page">
         <section class="downloads-hero">
             <div class="container">
-                <h1>macOS is not available yet</h1>
-                <p>We are waiting until the app can be distributed properly under Apple’s signing and notarization requirements.</p>
+                <h1>macOS (Apple Silicon)</h1>
+                <p>Native desktop app for M1/M2/M3 Macs. Unsigned build — see instructions below to open.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
-                    <a class="btn btn-primary btn-lg" href="/install/chrome.html">Use Chrome on macOS</a>
+                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-macos.dmg" download>Download for macOS (.dmg)</a>
                     <a class="btn btn-outline btn-lg" href="/downloads.html">View available platforms</a>
                 </div>
             </div>
@@ -55,8 +55,9 @@
 
         <section class="downloads">
             <div class="container install-steps">
-                <h2>Why there is no download</h2>
-                <p class="downloads-note">VeritasVPN does not currently have the Apple distribution credentials needed to sign and notarize a public macOS build. We will not ask customers to bypass Gatekeeper or present an unsigned build as production-ready.</p>
+                <h2>Apple notarization</h2>
+                <p class="downloads-note">This is an unsigned build — Apple will block it by default. Right-click the app in Finder and select <strong>Open</strong>, then click <strong>Open</strong> again in the dialog. This bypasses Gatekeeper for this app only.</p>
+                <p class="downloads-note" style="margin-top:10px;">A proper signed and notarized build will come once we enroll in the Apple Developer Program.</p>
             </div>
         </section>
     </main>
@@ -89,6 +90,6 @@
             <button type="button" class="auth-switch" id="authSwitchHint">Don't have an account? Sign up</button>
         </div>
     </div>
-    <script type="module" src="../js/main.js?v=brand4"></script>
+    <script type="module" src="../js/main.js?v=brand5"></script>
 </body>
 </html>

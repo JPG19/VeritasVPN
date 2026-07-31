@@ -193,8 +193,8 @@ function renderDownloads() {
         </a>
         <a class="download-tile" href="/install/macos.html">
           <h3>macOS</h3>
-          <p>Desktop app — build from source on your Mac. One command to produce a .dmg.</p>
-          <span class="btn btn-primary btn-sm">Build for Mac</span>
+          <p>Apple Silicon .dmg — unsigned, right-click to open.</p>
+          <span class="btn btn-primary btn-sm">Download for Mac</span>
         </a>
         <a class="download-tile" href="/install/chrome.html">
           <h3>Chrome</h3>
