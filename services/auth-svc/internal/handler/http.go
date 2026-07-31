@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -34,6 +35,7 @@ func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/auth/reset-password", h.withCORS(h.handleResetPassword))
 	mux.HandleFunc("/api/v1/auth/register-anonymous", h.withCORS(h.handleRegisterAnonymous))
 	mux.HandleFunc("/api/v1/auth/signin-account", h.withCORS(h.handleSignInAccount))
+	mux.HandleFunc("/api/v1/auth/download-account", h.withCORS(h.handleDownloadAccount))
 }
 
 func (h *HTTPHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -274,6 +276,36 @@ func (h *HTTPHandler) handleRegisterAnonymous(w http.ResponseWriter, r *http.Req
 		"account_id":    accountID,
 		"expires_at":    expiresAt,
 	})
+}
+
+func (h *HTTPHandler) handleDownloadAccount(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeHTTPError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		token = extractBearer(r)
+	}
+	if token == "" {
+		writeHTTPError(w, http.StatusUnauthorized, "missing authorization token")
+		return
+	}
+
+	claims, err := h.service.ValidateToken(r.Context(), token)
+	if err != nil {
+		writeHTTPError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	content := fmt.Sprintf("VeritasVPN Account ID\n\n%s\n\nSave this file — it is the only way to recover your account.\n", claims.AccountID)
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="veritasvpn-account.txt"`))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(content))
 }
 
 func (h *HTTPHandler) handleSignInAccount(w http.ResponseWriter, r *http.Request) {
