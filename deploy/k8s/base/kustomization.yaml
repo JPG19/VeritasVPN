@@ -5,6 +5,9 @@ resources:
   - namespace.yaml
   - secrets.yaml
   - configmap.yaml
+  - nginx-configmap.yaml
+  - nats-configmap.yaml
+  - network-policy.yaml
   - postgres-migrations-configmap.yaml
   - postgres.yaml
   - redis.yaml

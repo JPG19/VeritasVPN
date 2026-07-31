@@ -288,3 +288,16 @@ input::placeholder {
   margin-top: auto;
   text-align: center;
 }
+
+.network-map {
+  width: 100%;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.network-map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}

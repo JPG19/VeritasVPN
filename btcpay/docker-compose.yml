@@ -51,7 +51,7 @@ services:
       NBXPLORER_BTCNODEENDPOINT: bitcoind:${BTC_P2P_PORT:-18333}
       NBXPLORER_CHAINS: btc
       NBXPLORER_BIND: 0.0.0.0:32838
-      NBXPLORER_NOAUTH: "false"
+      NBXPLORER_NOAUTH: "true"
       NBXPLORER_POSTGRES: User ID=btcpay;Password=${BTCPAY_POSTGRES_PASSWORD:-change-me};Host=postgres-btcpay;Port=5432;Database=nbxplorer
       NBXPLORER_AUTOMIGRATE: "true"
     volumes:
@@ -118,7 +118,7 @@ services:
       BTCPAY_NETWORK: ${BTC_NETWORK:-testnet}
       BTCPAY_POSTGRES: User ID=btcpay;Password=${BTCPAY_POSTGRES_PASSWORD:-change-me};Host=postgres-btcpay;Port=5432;Database=btcpay
       BTCPAY_BTCEXPLORERURL: http://nbxplorer:32838
-      BTCPAY_CHAINS: btc,xmr
+      BTCPAY_CHAINS: btc
       BTCPAY_BIND: 0.0.0.0:49392
       BTCPAY_EXTERNALURL: ${BTCPAY_EXTERNAL_URL:-http://localhost:49392}
       BTCPAY_CHECKREVOCATIONLIST: "false"

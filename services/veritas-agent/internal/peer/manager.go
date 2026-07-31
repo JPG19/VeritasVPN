@@ -30,9 +30,6 @@ func New(wgManager *wireguard.Manager) *Manager {
 }
 
 func (m *Manager) AddPeer(peerID, pubkey, psk string, allowedIPs []string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	ipNets := cidrsToIPNets(allowedIPs)
 
 	var pskPtr *string
@@ -44,42 +41,43 @@ func (m *Manager) AddPeer(peerID, pubkey, psk string, allowedIPs []string) error
 		return fmt.Errorf("peer add %s: %w", peerID, err)
 	}
 
+	m.mu.Lock()
 	m.peers[pubkey] = &PeerConfig{
 		PeerID:       peerID,
 		PublicKey:    pubkey,
 		PresharedKey: psk,
 		AllowedIPs:   allowedIPs,
 	}
+	m.mu.Unlock()
 
 	return nil
 }
 
 func (m *Manager) RemovePeer(pubkey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if err := m.wg.RemovePeer(pubkey); err != nil {
 		return fmt.Errorf("peer remove %s: %w", pubkey, err)
 	}
 
+	m.mu.Lock()
 	delete(m.peers, pubkey)
+	m.mu.Unlock()
 	return nil
 }
 
 func (m *Manager) SyncPeers(desired []PeerConfig) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	want := make(map[string]*PeerConfig, len(desired))
 	for i := range desired {
 		want[desired[i].PublicKey] = &desired[i]
 	}
 
+	m.mu.Lock()
 	for pubkey := range m.peers {
 		if _, ok := want[pubkey]; !ok {
+			m.mu.Unlock()
 			if err := m.wg.RemovePeer(pubkey); err != nil {
 				return fmt.Errorf("sync remove %s: %w", pubkey, err)
 			}
+			m.mu.Lock()
 			delete(m.peers, pubkey)
 		}
 	}
@@ -93,23 +91,27 @@ func (m *Manager) SyncPeers(desired []PeerConfig) error {
 				pskPtr = &cfg.PresharedKey
 			}
 
+			m.mu.Unlock()
 			if err := m.wg.AddPeer(pubkey, ipNets, pskPtr); err != nil {
 				return fmt.Errorf("sync add %s: %w", pubkey, err)
 			}
+			m.mu.Lock()
 			m.peers[pubkey] = cfg
 		}
 	}
+	m.mu.Unlock()
 
 	return nil
 }
 
 func (m *Manager) GetStats() (rxBytes, txBytes int64, peerCount int32) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	count := int32(len(m.peers))
+	m.mu.RUnlock()
 
 	wgPeers, err := m.wg.ListPeers()
 	if err != nil {
-		return 0, 0, int32(len(m.peers))
+		return 0, 0, count
 	}
 
 	for _, p := range wgPeers {
@@ -117,7 +119,7 @@ func (m *Manager) GetStats() (rxBytes, txBytes int64, peerCount int32) {
 		txBytes += p.TXBytes
 	}
 
-	return rxBytes, txBytes, int32(len(m.peers))
+	return rxBytes, txBytes, count
 }
 
 func cidrsToIPNets(cidrs []string) []net.IPNet {

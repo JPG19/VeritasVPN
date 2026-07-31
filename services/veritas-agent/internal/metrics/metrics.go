@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -65,8 +66,23 @@ func (m *Metrics) Handler() http.Handler {
 	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
 }
 
-func (m *Metrics) Start() error {
+func (m *Metrics) Server() *http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", m.Handler())
-	return http.ListenAndServe(":"+m.port, mux)
+	return &http.Server{
+		Addr:              ":" + m.port,
+		Handler:           mux,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+}
+
+func (m *Metrics) Start() error {
+	return m.Server().ListenAndServe()
+}
+
+func (m *Metrics) StartWithServer(srv *http.Server) error {
+	return srv.ListenAndServe()
 }

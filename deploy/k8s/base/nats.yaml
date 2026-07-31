@@ -39,15 +39,14 @@ spec:
         - name: nats
           image: nats:2.10-alpine
           args:
-            - -js
-            - -m
-            - "8222"
-            - --store_dir
-            - /data/jetstream
+            - -c
+            - /etc/nats/nats-server.conf
           ports:
             - containerPort: 4222
             - containerPort: 8222
           volumeMounts:
+            - name: nats-config
+              mountPath: /etc/nats
             - name: nats-data
               mountPath: /data
           readinessProbe:
@@ -69,6 +68,10 @@ spec:
             limits:
               cpu: 300m
               memory: 512Mi
+      volumes:
+        - name: nats-config
+          configMap:
+            name: nats-config
   volumeClaimTemplates:
     - metadata:
         name: nats-data

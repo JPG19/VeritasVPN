@@ -14,13 +14,14 @@ spec:
     app: nbxplorer
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: nbxplorer
   namespace: btcpay
   labels:
     app: nbxplorer
 spec:
+  serviceName: nbxplorer
   replicas: 1
   selector:
     matchLabels:
@@ -57,6 +58,8 @@ spec:
               value: "true"
             - name: DOTNET_USE_POLLING_FILE_WATCHER
               value: "true"
+            - name: NBXPLORER_DATADIR
+              value: "/data"
           command:
             - /bin/sh
             - -c
@@ -68,6 +71,9 @@ spec:
                 name: btcpay-secrets
           ports:
             - containerPort: 32838
+          volumeMounts:
+            - name: nbxplorer-data
+              mountPath: /data
           readinessProbe:
             httpGet:
               path: /
@@ -87,3 +93,11 @@ spec:
             limits:
               cpu: 300m
               memory: 512Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: nbxplorer-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

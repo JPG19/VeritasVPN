@@ -71,7 +71,20 @@ logs/
 cloudflared
 .cloudflared/
 
+# Cloudflared credentials
+.cloudflared-credentials.json
+
 # BTCPay secrets
 btcpay/.env
 containers/proxy-gateway/data/
 website/downloads/veritasvpn-linux.*
+
+# Deployment backups and runtime data
+/backups/
+/deploy/backup/backups/
+
+# Production .env variants
+.env.prod
+deploy/security/.env.prod
+deploy/k8s/base/secrets.yaml
+deploy/k8s/btcpay/secrets.yaml

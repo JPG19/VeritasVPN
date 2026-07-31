@@ -1,11 +1,15 @@
 package firewall
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
+
+const cmdTimeout = 10 * time.Second
 
 type Manager struct {
 	tableName string
@@ -16,9 +20,15 @@ func New() *Manager {
 }
 
 func (m *Manager) run(args ...string) error {
-	cmd := exec.Command("nft", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "nft", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("nft %s: timed out after %v", strings.Join(args, " "), cmdTimeout)
+		}
 		return fmt.Errorf("nft %s: %s: %w", strings.Join(args, " "), strings.TrimSpace(string(output)), err)
 	}
 	return nil
@@ -37,8 +47,6 @@ func (m *Manager) ensureChain(chain, spec string) {
 }
 
 func (m *Manager) SetupNAT(iface string) error {
-	// Prefer host bootstrap iptables MASQUERADE (deploy/node/bootstrap-wg.sh).
-	// nft rule kept as best-effort for container-only setups.
 	egress := os.Getenv("EGRESS_IFACE")
 	if egress == "" {
 		return nil

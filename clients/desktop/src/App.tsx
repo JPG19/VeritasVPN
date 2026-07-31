@@ -1,7 +1,6 @@
 import { useState, useEffect, FormEvent, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  getStoredUser,
   getStoredToken,
   refreshSession,
   signIn as doSignIn,
@@ -44,7 +43,7 @@ interface PeerResponse {
 }
 
 function App() {
-  const [user, setUser] = useState<User | null>(getStoredUser);
+  const [user, setUser] = useState<User | null>(null);
   const [mode, setMode] = useState<AuthMode>("signin");
   const [method, setMethod] = useState<AuthMethod>("email");
   const [email, setEmail] = useState("");
@@ -384,6 +383,21 @@ function App() {
           : "Disconnected"}
       </div>
       {statusMsg && <div className="status-msg">{statusMsg}</div>}
+      <div className="network-map">
+        <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="300" cy="150" r="145" fill="none" stroke="var(--border)" strokeWidth="0.5" />
+          <text x="300" y="28" textAnchor="middle" fill="var(--text-muted)" fontSize="11">Network map</text>
+          <g transform="translate(300,150)">
+            <circle r="60" fill="var(--surface)" opacity="0.3" />
+            <circle r="3" fill="var(--accent)">
+              <animate attributeName="r" values="3;6;3" dur="2s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" />
+            </circle>
+            <text y="22" textAnchor="middle" fill="var(--text)" fontSize="12" fontWeight="600">Paraguay</text>
+            <text y="36" textAnchor="middle" fill="var(--text-muted)" fontSize="11">Asunción metro</text>
+          </g>
+        </svg>
+      </div>
       {!connected ? (
         <button className="btn-connect" onClick={handleConnect}>
           Connect

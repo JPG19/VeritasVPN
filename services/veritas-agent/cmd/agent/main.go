@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,6 +30,8 @@ import (
 	"github.com/veritasvpn/services/veritas-agent/internal/peer"
 	"github.com/veritasvpn/services/veritas-agent/internal/wireguard"
 )
+
+const iptablesTimeout = 10 * time.Second
 
 type RegisterServerRequest struct {
 	Hostname  string `json:"hostname"`
@@ -86,8 +90,17 @@ func NewAgentClient(endpoint string) *httpAgentClient {
 
 func (c *httpAgentClient) streamClient() *http.Client {
 	return &http.Client{
-		// SSE streams must not use a request timeout.
 		Timeout: 0,
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: 30 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
 	}
 }
 
@@ -168,6 +181,17 @@ func (c *httpAgentClient) StreamPeerUpdates(ctx context.Context, serverID, authT
 			errCh <- err
 			return
 		}
+
+		closed := make(chan struct{})
+		defer close(closed)
+		go func() {
+			select {
+			case <-ctx.Done():
+				resp.Body.Close()
+			case <-closed:
+			}
+		}()
+
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
@@ -179,6 +203,12 @@ func (c *httpAgentClient) StreamPeerUpdates(ctx context.Context, serverID, authT
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			line := scanner.Text()
 			if !strings.HasPrefix(line, "data: ") {
 				continue
@@ -288,12 +318,14 @@ type Agent struct {
 	peerManager   *peer.Manager
 	fwManager     *firewall.Manager
 	metrics       *metrics.Metrics
+	metricsSrv    *http.Server
 	managerClient AgentManagerClient
 	serverID      string
 	publicKey     string
 	startTime     time.Time
 	prevRXBytes   int64
 	prevTXBytes   int64
+	wg            sync.WaitGroup
 }
 
 func NewAgent(cfg *AgentConfig, logger *logging.Logger) (*Agent, error) {
@@ -353,16 +385,27 @@ func (a *Agent) Run() error {
 		zap.String("server_id", resp.ServerID))
 
 	a.metrics = metrics.New(a.cfg.MetricsPort)
+	a.metricsSrv = a.metrics.Server()
 
+	a.wg.Add(1)
 	go func() {
-		if err := a.metrics.Start(); err != nil {
+		defer a.wg.Done()
+		if err := a.metrics.StartWithServer(a.metricsSrv); err != nil && err != http.ErrServerClosed {
 			a.logger.Error("Metrics server error", zap.Error(err))
 		}
 	}()
 
-	go a.heartbeatLoop(ctx)
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		a.heartbeatLoop(ctx)
+	}()
 
-	go a.streamLoop(ctx)
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		a.streamLoop(ctx)
+	}()
 
 	a.logger.Info("Agent running",
 		zap.String("interface", a.cfg.WGInterface),
@@ -375,6 +418,14 @@ func (a *Agent) Run() error {
 	a.logger.Info("Received signal, shutting down", zap.String("signal", sig.String()))
 
 	cancel()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := a.metricsSrv.Shutdown(shutdownCtx); err != nil {
+		a.logger.Error("Metrics server shutdown error", zap.Error(err))
+	}
+
+	a.wg.Wait()
 
 	a.logger.Info("Cleaning up firewall rules")
 	if err := a.fwManager.Cleanup(); err != nil {
@@ -450,6 +501,12 @@ func enableIPForward() error {
 	return os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
 }
 
+func iptablesCommand(args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), iptablesTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, "iptables", args...).Run()
+}
+
 func ensureMasquerade(subnet, wgIface string) error {
 	if subnet == "" {
 		subnet = "10.0.0.0/24"
@@ -470,11 +527,9 @@ func ensureMasquerade(subnet, wgIface string) error {
 	if check.Run() == nil {
 		return nil
 	}
-	return exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", subnet, "-o", egress, "-j", "MASQUERADE").Run()
+	return iptablesCommand("-t", "nat", "-A", "POSTROUTING", "-s", subnet, "-o", egress, "-j", "MASQUERADE")
 }
 
-// ensureForwardAccept inserts ACCEPT rules at the top of FORWARD so WG traffic is
-// not dropped by a default DROP policy / UFW reject rules later in the chain.
 func ensureForwardAccept(wgIface string) error {
 	if wgIface == "" {
 		wgIface = "wg0"
@@ -483,13 +538,13 @@ func ensureForwardAccept(wgIface string) error {
 	_ = exec.Command("iptables", "-D", "FORWARD", "-o", wgIface, "-j", "ACCEPT").Run()
 	_ = exec.Command("iptables", "-D", "FORWARD", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT").Run()
 
-	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-o", wgIface, "-j", "ACCEPT").Run(); err != nil {
+	if err := iptablesCommand("-I", "FORWARD", "1", "-o", wgIface, "-j", "ACCEPT"); err != nil {
 		return err
 	}
-	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-i", wgIface, "-j", "ACCEPT").Run(); err != nil {
+	if err := iptablesCommand("-I", "FORWARD", "1", "-i", wgIface, "-j", "ACCEPT"); err != nil {
 		return err
 	}
-	return exec.Command("iptables", "-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT").Run()
+	return iptablesCommand("-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT")
 }
 
 func (a *Agent) registerWithManager(ctx context.Context) (*RegisterServerResponse, error) {
@@ -554,6 +609,9 @@ func (a *Agent) heartbeatLoop(ctx context.Context) {
 }
 
 func (a *Agent) streamLoop(ctx context.Context) {
+	backoff := time.Second
+	const maxBackoff = 2 * time.Minute
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -562,34 +620,45 @@ func (a *Agent) streamLoop(ctx context.Context) {
 		}
 
 		a.logger.Info("Connecting to peer update stream")
-		updates, errs := a.managerClient.StreamPeerUpdates(ctx, a.serverID, a.cfg.AuthToken)
+
+		streamCtx, streamCancel := context.WithCancel(ctx)
+		updates, errs := a.managerClient.StreamPeerUpdates(streamCtx, a.serverID, a.cfg.AuthToken)
 
 		for {
 			select {
 			case update, ok := <-updates:
 				if !ok {
 					a.logger.Warn("Peer update stream closed, reconnecting...")
+					streamCancel()
 					goto reconnect
 				}
 				a.handlePeerUpdate(update)
 			case err, ok := <-errs:
 				if !ok || err == io.EOF {
+					streamCancel()
 					goto reconnect
 				}
 				if err != nil {
 					a.logger.Error("Peer update stream error", zap.Error(err))
+					streamCancel()
 					goto reconnect
 				}
 			case <-ctx.Done():
+				streamCancel()
 				return
 			}
 		}
 
 	reconnect:
+		streamCancel()
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(5 * time.Second):
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
 		}
 	}
 }

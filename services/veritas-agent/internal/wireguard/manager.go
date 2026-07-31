@@ -5,10 +5,13 @@ import (
 	"net"
 	"os/exec"
 	"strings"
+	"time"
 
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
+
+const netlinkTimeout = 30 * time.Second
 
 type PeerInfo struct {
 	PublicKey  string
@@ -30,7 +33,39 @@ func NewManager(ifaceName string) (*Manager, error) {
 	return &Manager{client: client, iface: ifaceName}, nil
 }
 
-// EnsureInterface brings up the WireGuard device with listen port, address, and private key.
+func configureWithTimeout(client *wgctrl.Client, iface string, cfg wgtypes.Config, timeout time.Duration) error {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- client.ConfigureDevice(iface, cfg)
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-time.After(timeout):
+		return fmt.Errorf("wgctrl: ConfigureDevice timed out after %v on %q", timeout, iface)
+	}
+}
+
+func deviceWithTimeout(client *wgctrl.Client, iface string, timeout time.Duration) (*wgtypes.Device, error) {
+	type result struct {
+		dev *wgtypes.Device
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		d, err := client.Device(iface)
+		ch <- result{d, err}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.dev, r.err
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("wgctrl: Device timed out after %v on %q", timeout, iface)
+	}
+}
+
 func (m *Manager) EnsureInterface(privateKey wgtypes.Key, listenPort int, addressCIDR string) error {
 	if err := ensureLink(m.iface); err != nil {
 		return err
@@ -46,7 +81,7 @@ func (m *Manager) EnsureInterface(privateKey wgtypes.Key, listenPort int, addres
 		PrivateKey: &privateKey,
 		ListenPort: &listenPort,
 	}
-	if err := m.client.ConfigureDevice(m.iface, cfg); err != nil {
+	if err := configureWithTimeout(m.client, m.iface, cfg, netlinkTimeout); err != nil {
 		return fmt.Errorf("wgctrl configure %s: %w", m.iface, err)
 	}
 
@@ -72,7 +107,6 @@ func ensureAddress(iface, addressCIDR string) error {
 		return nil
 	}
 	if err := exec.Command("ip", "addr", "add", addressCIDR, "dev", iface).Run(); err != nil {
-		// Address may already exist with a different prefix; treat as non-fatal if present.
 		out2, _ := exec.Command("ip", "-4", "addr", "show", "dev", iface).CombinedOutput()
 		if strings.Contains(string(out2), strings.Split(addressCIDR, "/")[0]) {
 			return nil
@@ -106,7 +140,7 @@ func (m *Manager) AddPeer(pubkey string, allowedIPs []net.IPNet, psk *string) er
 		Peers: []wgtypes.PeerConfig{peerCfg},
 	}
 
-	return m.client.ConfigureDevice(m.iface, cfg)
+	return configureWithTimeout(m.client, m.iface, cfg, netlinkTimeout)
 }
 
 func (m *Manager) RemovePeer(pubkey string) error {
@@ -122,11 +156,11 @@ func (m *Manager) RemovePeer(pubkey string) error {
 		}},
 	}
 
-	return m.client.ConfigureDevice(m.iface, cfg)
+	return configureWithTimeout(m.client, m.iface, cfg, netlinkTimeout)
 }
 
 func (m *Manager) ListPeers() ([]PeerInfo, error) {
-	dev, err := m.client.Device(m.iface)
+	dev, err := deviceWithTimeout(m.client, m.iface, netlinkTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("wgctrl: failed to get device %q: %w", m.iface, err)
 	}
@@ -144,7 +178,7 @@ func (m *Manager) ListPeers() ([]PeerInfo, error) {
 }
 
 func (m *Manager) GetDevice() (*wgtypes.Device, error) {
-	dev, err := m.client.Device(m.iface)
+	dev, err := deviceWithTimeout(m.client, m.iface, netlinkTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("wgctrl: failed to get device %q: %w", m.iface, err)
 	}

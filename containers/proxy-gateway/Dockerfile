@@ -4,7 +4,8 @@ RUN apk add --no-cache \
     curl \
     bash
 
-RUN curl -sL https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz \
+RUN ARCH=$(uname -m); case "$ARCH" in x86_64) ARCH="amd64" ;; aarch64) ARCH="armv8" ;; *) ARCH="amd64" ;; esac; \
+    curl -sL "https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-${ARCH}-2.11.5.gz" \
     | gunzip > /usr/local/bin/gost && chmod +x /usr/local/bin/gost
 
 COPY entrypoint.sh /entrypoint.sh

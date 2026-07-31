@@ -106,6 +106,22 @@ spec:
           volumeMounts:
             - name: wireguard
               mountPath: /etc/wireguard
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - ip link show wg0 >/dev/null 2>&1 && ss -lntu | grep -q 51820
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - ip link show wg0 >/dev/null 2>&1 && ss -lntu | grep -q 51820
+            initialDelaySeconds: 60
+            periodSeconds: 30
           resources:
             requests:
               cpu: 50m
