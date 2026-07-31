@@ -3,16 +3,6 @@
   background: var(--bg-primary);
 }
 
-.account-boot {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  color: var(--text-secondary);
-}
-
 .account-shell {
   display: grid;
   grid-template-columns: 240px 1fr;

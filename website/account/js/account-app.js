@@ -12,7 +12,6 @@ import {
 
 const content = document.getElementById('accountContent');
 const shell = document.getElementById('accountShell');
-const boot = document.getElementById('accountBoot');
 const emailEl = document.getElementById('accountEmail');
 const upgradeBtn = document.getElementById('headerUpgradeBtn');
 const signOutBtn = document.getElementById('accountSignOut');
@@ -187,6 +186,11 @@ function renderDownloads() {
         </div>
       </div>
       <div class="download-grid">
+        <a class="download-tile" href="/install/windows.html">
+          <h3>Windows</h3>
+          <p>Native desktop app. Early access build available.</p>
+          <span class="btn btn-primary btn-sm">Download for Windows</span>
+        </a>
         <a class="download-tile" href="/install/macos.html">
           <h3>macOS</h3>
           <p>Desktop app — build from source on your Mac. One command to produce a .dmg.</p>
@@ -204,7 +208,6 @@ function renderDownloads() {
         </a>
       </div>
       <div class="muted-list" aria-label="Coming soon">
-        <span class="muted-chip">Windows — soon</span>
         <span class="muted-chip">iPhone / iPad — soon</span>
         <span class="muted-chip">Android — soon</span>
         <span class="muted-chip">Firefox — soon</span>
@@ -363,7 +366,6 @@ onAuthStateChanged(async (user) => {
   }
 
   emailEl.textContent = user.email || user.account_id;
-  boot.hidden = true;
   shell.hidden = false;
 
   try {
