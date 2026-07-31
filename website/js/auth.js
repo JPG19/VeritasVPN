@@ -495,6 +495,16 @@ function renderUser(user) {
 
     if (mode === 'anon-signup') {
       if (anonCreated) {
+        const accountId = submitBtn?.dataset.downloadAccount;
+        if (accountId) {
+          const blob = new Blob([`VeritasVPN Account ID\n\n${accountId}\n\nSave this file — it is the only way to recover your account.\n`], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'veritasvpn-account.txt';
+          a.click();
+          URL.revokeObjectURL(url);
+        }
         closeModal();
         enterDashboard();
         return;
@@ -508,10 +518,12 @@ function renderUser(user) {
         updateNavbar(user);
         anonCreated = true;
         setMode('anon-signup');
-        setError(`Your account ID: <strong>${data.account_id}</strong><br><br>Copy it now — no way to recover it.`, { success: true });
+        const accountId = data.account_id;
+        setError(`Your account ID: <strong>${accountId}</strong><br><br>Click below to download it — no other way to recover it.`, { success: true });
         if (submitBtn) {
-          submitBtn.textContent = 'Go to dashboard';
-          submitBtn.className = 'btn btn-primary btn-block';
+          submitBtn.textContent = 'Download account ID (.txt)';
+          submitBtn.className = 'btn btn-accent btn-block';
+          submitBtn.dataset.downloadAccount = accountId;
         }
       } catch (err) {
         setError(mapAuthError(err.message));
