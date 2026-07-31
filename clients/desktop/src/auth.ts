@@ -43,17 +43,24 @@ async function authAPI(
   body: Record<string, unknown> | string = {}
 ): Promise<AuthResponse> {
   const url = `${AUTH_API}${path}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const err = data as AuthError;
-    throw new Error(humanizeError(err?.error || "Authentication failed"));
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const err = data as AuthError;
+      throw new Error(humanizeError(err?.error || `Request failed (${res.status})`));
+    }
+    return data as AuthResponse;
+  } catch (e) {
+    if (e instanceof TypeError && e.message.includes("fetch")) {
+      throw new Error(`Network error — check internet and try again. (${e.message})`);
+    }
+    throw e;
   }
-  return data as AuthResponse;
 }
 
 function persistSession(user: User, data: AuthResponse): User {
@@ -134,7 +141,7 @@ export async function signInWithAccountId(accountId: string): Promise<User> {
 
 /** Create an anonymous account; caller must show `account_id` to the user once. */
 export async function registerAnonymous(): Promise<User> {
-  const data = await authAPI("/api/v1/auth/register-anonymous", "{}");
+  const data = await authAPI("/api/v1/auth/register-anonymous");
   return persistSession(
     { account_id: data.account_id, is_anonymous: true },
     data
