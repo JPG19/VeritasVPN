@@ -8,6 +8,13 @@
     "shell:allow-execute",
     "shell:allow-spawn",
     "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "https://veritasvpn.cloud/**" },
+        { "url": "https://api.veritasvpn.cloud/**" }
+      ]
+    },
     "opener:default"
   ]
 }
