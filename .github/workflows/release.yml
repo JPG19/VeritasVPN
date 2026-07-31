@@ -33,6 +33,8 @@ jobs:
         working-directory: clients/desktop
 
       - name: Build .dmg
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
         run: npx tauri build
         working-directory: clients/desktop
 
