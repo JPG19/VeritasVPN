@@ -217,6 +217,8 @@ function renderDownloads() {
 }
 
 function renderAccount(user) {
+  const isAnonymous = !user.email;
+
   return `
     ${renderFlash()}
     <section class="account-section">
@@ -227,14 +229,16 @@ function renderAccount(user) {
         </div>
       </div>
       <div class="account-card">
+        ${!isAnonymous ? `
         <p class="plan-card-meta">Email</p>
-        <div class="plan-card-title" style="font-size:18px;">${user.email || '—'}</div>
-        <p class="plan-card-meta" style="margin-top:12px;">Account ID</p>
+        <div class="plan-card-title" style="font-size:18px;">${user.email}</div>
+        ` : ''}
+        <p class="plan-card-meta" style="${isAnonymous ? '' : 'margin-top:12px;'}">Account ID</p>
         <code style="font-size:12px;color:var(--text-muted);word-break:break-all;">${
           user.account_id || '—'
         }</code>
         <div class="account-actions">
-          <button type="button" class="btn btn-outline" data-action="reset-password">Send password reset email</button>
+          ${!isAnonymous ? '<button type="button" class="btn btn-outline" data-action="reset-password">Send password reset email</button>' : ''}
           <button type="button" class="btn btn-primary" data-action="signout">Sign out</button>
         </div>
       </div>
