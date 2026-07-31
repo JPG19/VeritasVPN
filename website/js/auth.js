@@ -491,6 +491,11 @@ function renderUser(user) {
     setError('');
 
     if (mode === 'anon-signup') {
+      const frame = document.createElement('iframe');
+      frame.style.display = 'none';
+      frame.dataset.dl = '1';
+      document.body.appendChild(frame);
+
       setBusy(true);
       try {
         const data = await registerAnonymous();
@@ -499,10 +504,9 @@ function renderUser(user) {
         currentUser = user;
         updateNavbar(user);
 
-        const blob = new Blob([`VeritasVPN Account ID\n\n${data.account_id}\n\nSave this file — it is the only way to recover your account.\n`], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        location.href = url;
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        const safeId = data.account_id.replace(/[^a-f0-9]/g, '');
+        frame.srcdoc = `<html><body><script>let b=new Blob(['VeritasVPN Account ID\\n\\n${safeId}\\n\\nSave this file — it is the only way to recover your account.\\n'],{type:'text/plain'});let u=URL.createObjectURL(b);let a=document.createElement('a');a.href=u;a.download='veritasvpn-account.txt';document.body.appendChild(a);a.click();<\/script></body></html>`;
+        setTimeout(() => { try { document.body.removeChild(frame); } catch(_){} }, 3000);
 
         setError(`Account created. Account ID: <strong>${data.account_id}</strong> — check your downloads.`, { success: true });
         setTimeout(() => {
@@ -511,6 +515,7 @@ function renderUser(user) {
         }, 800);
       } catch (err) {
         setError(mapAuthError(err.message));
+        try { document.body.removeChild(frame); } catch(_) {}
       } finally {
         setBusy(false);
       }
