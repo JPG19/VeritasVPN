@@ -217,6 +217,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   const emailInput = document.getElementById('authEmail');
   const passwordInput = document.getElementById('authPassword');
   const submitBtn = document.getElementById('authSubmit');
+  const anonNote = document.getElementById('authAnonNote');
   const googleBtn = document.getElementById('authGoogle');
   const resetBtn = document.getElementById('authReset');
   const errorEl = document.getElementById('authError');
@@ -267,6 +268,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       if (switchHint) switchHint.hidden = true;
       if (anonSignupBtn) anonSignupBtn.hidden = true;
       if (anonSigninBtn) anonSigninBtn.hidden = true;
+      if (anonNote) anonNote.classList.remove('is-hidden');
     } else if (mode === 'anon-signin') {
       if (titleEl) titleEl.textContent = 'Sign in with Account ID';
       if (submitBtn) {
@@ -306,6 +308,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       if (switchHint) switchHint.hidden = false;
       if (anonSignupBtn) anonSignupBtn.hidden = isSignIn;
       if (anonSigninBtn) anonSigninBtn.hidden = !isSignIn;
+      if (anonNote) anonNote.classList.add('is-hidden');
 
       const emailLabel = emailInput?.closest('label');
       if (emailLabel) {
