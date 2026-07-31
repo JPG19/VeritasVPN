@@ -6,13 +6,18 @@ async function api(path, options = {}) {
   if (!token) {
     throw new Error('Not signed in');
   }
+  const method = options.method || 'GET';
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    ...(options.headers || {}),
+  };
+  if (method !== 'GET' && method !== 'HEAD') {
+    headers['Content-Type'] = 'application/json';
+  }
   const res = await fetch(`${BILLING_API}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(options.headers || {}),
-    },
+    method,
+    headers,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

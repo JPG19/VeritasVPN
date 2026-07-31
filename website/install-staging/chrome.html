@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VeritasVPN for macOS is planned but not currently offered for download.">
-    <title>VeritasVPN for macOS — Planned</title>
+    <title>Add VeritasVPN for Chrome</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
@@ -44,19 +43,35 @@
     <main class="downloads-page">
         <section class="downloads-hero">
             <div class="container">
-                <h1>macOS is not available yet</h1>
-                <p>We are waiting until the app can be distributed properly under Apple’s signing and notarization requirements.</p>
+                <h1>Add to Chrome</h1>
+                <p>Install the VeritasVPN extension and protect your browser traffic.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
-                    <a class="btn btn-primary btn-lg" href="/install/chrome.html">Use Chrome on macOS</a>
-                    <a class="btn btn-outline btn-lg" href="/downloads.html">View available platforms</a>
+                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-chrome.zip" download>Download Chrome extension</a>
+                    <a class="btn btn-outline btn-lg" href="/downloads.html">All downloads</a>
                 </div>
             </div>
         </section>
 
         <section class="downloads">
             <div class="container install-steps">
-                <h2>Why there is no download</h2>
-                <p class="downloads-note">VeritasVPN does not currently have the Apple distribution credentials needed to sign and notarize a public macOS build. We will not ask customers to bypass Gatekeeper or present an unsigned build as production-ready.</p>
+                <h2>Install in 3 steps</h2>
+                <ol class="install-list">
+                    <li>
+                        <strong>Download</strong>
+                        <p>Save <code>veritasvpn-chrome.zip</code> and unzip it somewhere you will keep it.</p>
+                    </li>
+                    <li>
+                        <strong>Open Chrome extensions</strong>
+                        <p>Go to <code>chrome://extensions</code> and turn on <strong>Developer mode</strong> (top right).</p>
+                    </li>
+                    <li>
+                        <strong>Load unpacked</strong>
+                        <p>Click <strong>Load unpacked</strong> and select the unzipped <code>veritasvpn-chrome</code> folder (the one that contains <code>manifest.json</code>).</p>
+                    </li>
+                </ol>
+                <p class="downloads-note">
+                    Sign in with your VeritasVPN account, then hit Connect. The proxy is pre-configured — no manual setup needed. Chrome Web Store publishing comes next.
+                </p>
             </div>
         </section>
     </main>
@@ -81,7 +96,6 @@
                 </div>
                 <button type="button" class="auth-reset" id="authReset">Forgot password?</button>
                 <button type="submit" class="btn btn-primary btn-block" id="authSubmit">Sign in</button>
-                <p class="auth-note is-hidden" id="authAnonNote">This account ID will be shown only once. A .txt file will download automatically.</p>
             </form>
             <button type="button" class="auth-anon-link" id="authAnonSignup">Skip email — create anonymous account</button>
             <button type="button" class="auth-anon-link" id="authAnonSignin" hidden>Sign in with Account ID instead</button>
@@ -89,6 +103,6 @@
             <button type="button" class="auth-switch" id="authSwitchHint">Don't have an account? Sign up</button>
         </div>
     </div>
-    <script type="module" src="../js/main.js?v=brand4"></script>
+    <script type="module" src="../js/main.js"></script>
 </body>
 </html>
