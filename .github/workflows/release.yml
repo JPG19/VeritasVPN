@@ -28,47 +28,13 @@ jobs:
           node-version: '22'
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Import Apple certificate (if configured)
-        if: secrets.APPLE_CERTIFICATE != ''
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          CERT_PATH=$RUNNER_TEMP/apple_cert.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o "$CERT_PATH"
-          security create-keychain -p "" "$KEYCHAIN_PATH"
-          security default-keychain -s "$KEYCHAIN_PATH"
-          security unlock-keychain -p "" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH"
-          security find-identity -v -p codesigning
-
-      - name: Create notary key file (if configured)
-        if: secrets.APPLE_NOTARY_KEY != ''
-        env:
-          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
-          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-        run: |
-          mkdir -p ~/private_keys
-          echo -n "$APPLE_NOTARY_KEY" | base64 --decode -o ~/private_keys/AuthKey_${APPLE_NOTARY_KEY_ID}.p8
-
       - name: Install dependencies
         run: npm install
         working-directory: clients/desktop
 
       - name: Build .dmg
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
-          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
         run: npx tauri build
         working-directory: clients/desktop
-
-      - name: Clean up keychain
-        if: always()
-        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
 
       - name: Upload .dmg
         uses: actions/upload-artifact@v4
