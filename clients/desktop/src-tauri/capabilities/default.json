@@ -14,6 +14,34 @@
         { "url": "https://veritasvpn.cloud/**" },
         { "url": "https://api.veritasvpn.cloud/**" }
       ]
+    },
+    {
+      "identifier": "http:allow-fetch-send",
+      "allow": [
+        { "url": "https://veritasvpn.cloud/**" },
+        { "url": "https://api.veritasvpn.cloud/**" }
+      ]
+    },
+    {
+      "identifier": "http:allow-fetch-read-body",
+      "allow": [
+        { "url": "https://veritasvpn.cloud/**" },
+        { "url": "https://api.veritasvpn.cloud/**" }
+      ]
+    },
+    {
+      "identifier": "http:allow-fetch-cancel",
+      "allow": [
+        { "url": "https://veritasvpn.cloud/**" },
+        { "url": "https://api.veritasvpn.cloud/**" }
+      ]
+    },
+    {
+      "identifier": "http:allow-fetch-cancel-body",
+      "allow": [
+        { "url": "https://veritasvpn.cloud/**" },
+        { "url": "https://api.veritasvpn.cloud/**" }
+      ]
     }
   ]
 }
