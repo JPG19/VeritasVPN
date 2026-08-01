@@ -233,6 +233,13 @@ function App() {
         setStatusMsg("Connected via WireGuard");
       } else {
         setStatusMsg(result.message);
+        // Tunnel setup failed — clean up the orphaned peer on the server
+        // so it doesn't count against the device limit on retry.
+        await fetch(`${AUTH_API}/api/v1/wg/peers/${peer.peer_id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+          maxRedirections: 0,
+        }).catch(() => undefined);
       }
     } catch (err) {
       setStatusMsg(
