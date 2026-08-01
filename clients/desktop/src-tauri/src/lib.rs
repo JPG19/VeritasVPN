@@ -440,21 +440,6 @@ if [[ -n "$ENDPOINT_IP" && -n "$GW" ]]; then
   route -n add -host "$ENDPOINT_IP" "$GW"
 fi
 
-# Verify the tunnel actually forwards traffic before rerouting everything.
-for _ in $(seq 1 5); do
-  if ping -c 1 -t 1 -S "$ADDR" "$DNS" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 0.5
-done
-if ! ping -c 1 -t 1 -S "$ADDR" "$DNS" >/dev/null 2>&1; then
-  echo "tunnel not forwarding — tearing down" >&2
-  kill "$(cat "$PID_FILE")" 2>/dev/null || true
-  ifconfig "$IFACE" down 2>/dev/null || true
-  rm -f "$IFACE_FILE" "$PID_FILE" "$META_FILE"
-  exit 1
-fi
-
 # Split default (like wg-quick) so we don't replace the system default route entry.
 route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
