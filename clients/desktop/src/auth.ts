@@ -1,5 +1,4 @@
 import { AUTH_API } from "./config";
-import { fetch } from "@tauri-apps/plugin-http";
 
 interface AuthResponse {
   access_token: string;
