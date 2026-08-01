@@ -65,6 +65,18 @@ function App() {
     return () => clearTimeout(t);
   }, [statusMsg]);
 
+  useEffect(() => {
+    invoke<boolean>("tunnel_status").then((up) => {
+      if (up) {
+        invoke<string>("saved_peer_id").then((pid) => {
+          setConnected(true);
+          setTunnelMode("wireguard");
+          setPeerId(pid);
+        });
+      }
+    });
+  }, []);
+
   const switchMode = useCallback((next: AuthMode) => {
     setMode(next);
     setMethod("email");

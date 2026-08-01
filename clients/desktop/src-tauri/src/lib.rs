@@ -107,6 +107,20 @@ fn wireguard_available(app: AppHandle) -> bool {
 }
 
 #[tauri::command]
+fn tunnel_status() -> bool {
+    if let Ok(dir) = state_dir() {
+        dir.join("wireguard-go.pid").exists() && dir.join("iface").exists()
+    } else {
+        false
+    }
+}
+
+#[tauri::command]
+fn saved_peer_id() -> String {
+    peer_id_path().ok().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default().trim().to_string()
+}
+
+#[tauri::command]
 fn generate_wg_keys() -> Result<KeyPair, String> {
     let secret = StaticSecret::random_from_rng(OsRng);
     let public = PublicKey::from(&secret);
@@ -342,6 +356,21 @@ ifconfig "$IFACE" inet "$ADDR" "$ADDR" netmask 255.255.255.255 up
 if [[ -n "$ENDPOINT_IP" && -n "$GW" ]]; then
   route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
   route -n add -host "$ENDPOINT_IP" "$GW"
+fi
+
+# Verify the tunnel actually forwards traffic before rerouting everything.
+for _ in $(seq 1 5); do
+  if ping -c 1 -t 1 -S "$ADDR" "$DNS" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
+if ! ping -c 1 -t 1 -S "$ADDR" "$DNS" >/dev/null 2>&1; then
+  echo "tunnel not forwarding — tearing down" >&2
+  kill "$(cat "$PID_FILE")" 2>/dev/null || true
+  ifconfig "$IFACE" down 2>/dev/null || true
+  rm -f "$IFACE_FILE" "$PID_FILE" "$META_FILE"
+  exit 1
 fi
 
 # Split default (like wg-quick) so we don't replace the system default route entry.
@@ -705,6 +734,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             wireguard_available,
+            tunnel_status,
+            saved_peer_id,
             generate_wg_keys,
             connect_wireguard,
             disconnect_wireguard,
