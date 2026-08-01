@@ -48,6 +48,7 @@ async function authAPI(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    maxRedirections: 0,
   });
   let data: AuthResponse & AuthError;
   try {

@@ -149,6 +149,7 @@ function App() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ public_key: keys.public_key }),
+        maxRedirections: 0,
       });
       const peer = (await res.json()) as PeerResponse & { code?: string };
       if (!res.ok) {
@@ -210,6 +211,7 @@ function App() {
           await fetch(`${AUTH_API}/api/v1/wg/peers/${peerId}`, {
             method: "DELETE",
             headers: { Authorization: `Bearer ${token}` },
+            maxRedirections: 0,
           }).catch(() => undefined);
         }
         const result = await invoke<ConnectResult>("disconnect_wireguard");
