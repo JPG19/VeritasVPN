@@ -58,6 +58,7 @@ function App() {
   const [tunnelMode, setTunnelMode] = useState<TunnelMode>("");
   const [peerId, setPeerId] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     if (!statusMsg) return;
@@ -156,24 +157,55 @@ function App() {
       }
 
       const keys = await invoke<KeyPair>("generate_wg_keys");
-      const res = await fetch(`${AUTH_API}/api/v1/wg/peers`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ public_key: keys.public_key }),
-        maxRedirections: 0,
-      });
-      const peer = (await res.json()) as PeerResponse & { code?: string };
-      if (!res.ok) {
-        if (peer.code?.startsWith("plan_device_limit")) {
+
+      const doCreatePeer = async (): Promise<PeerResponse> => {
+        const res = await fetch(`${AUTH_API}/api/v1/wg/peers`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ public_key: keys.public_key }),
+          maxRedirections: 0,
+        });
+        const data = (await res.json()) as PeerResponse & { code?: string };
+        if (!res.ok) throw data;
+        return data;
+      };
+
+      let peer: PeerResponse & { code?: string };
+      try {
+        peer = await doCreatePeer();
+      } catch (firstErr) {
+        const errData = firstErr as PeerResponse & { code?: string };
+        if (!errData.code?.startsWith("plan_device_limit")) {
+          throw new Error(errData.error || "Failed to create WireGuard peer");
+        }
+        // Try to clean up a leftover peer from a previous
+        // session (e.g. the user killed the app manually).
+        const savedPid = await invoke<string>("saved_peer_id");
+        if (savedPid) {
+          await fetch(`${AUTH_API}/api/v1/wg/peers/${savedPid}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+            maxRedirections: 0,
+          }).catch(() => undefined);
+          await invoke("clear_saved_state");
+          try {
+            peer = await doCreatePeer();
+          } catch (retryErr) {
+            const retryData = retryErr as PeerResponse & { code?: string };
+            throw new Error(
+              retryData.error ||
+                "Device limit reached. Upgrade to Premium for more devices, or disconnect another device first."
+            );
+          }
+        } else {
           throw new Error(
-            peer.error ||
+            errData.error ||
               "Device limit reached. Upgrade to Premium for more devices, or disconnect another device first."
           );
         }
-        throw new Error(peer.error || "Failed to create WireGuard peer");
       }
 
       const allowed =
@@ -210,51 +242,82 @@ function App() {
   }, [connectSocksFallback]);
 
   const handleDisconnect = useCallback(async () => {
+    setDisconnecting(true);
     setStatusMsg("Disconnecting…");
-    // Always clear local tunnel UI state so a failed privileged teardown
-    // cannot leave the app stuck showing Connected.
-    const clearUi = () => {
-      setConnected(false);
-      setTunnelMode("");
-      setPeerId("");
-    };
+
+    // 1. Tear down local tunnel first — this MUST happen even when
+    //    the internet is broken because of a malfunctioning tunnel.
+    let localOk = false;
     try {
       if (tunnelMode === "wireguard" || peerId) {
-        const token = getStoredToken();
-        if (token && peerId) {
-          await fetch(`${AUTH_API}/api/v1/wg/peers/${peerId}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-            maxRedirections: 0,
-          }).catch(() => undefined);
-        }
         const result = await invoke<ConnectResult>("disconnect_wireguard");
-        clearUi();
-        if (!result.success) {
+        localOk = result.success;
+        if (!localOk) {
           setStatusMsg(
             result.message ||
               "Disconnect incomplete — approve the admin prompt, or run: sudo bash ~/Library/Application\\ Support/cloud.veritasvpn.desktop/teardown.sh"
           );
+          setDisconnecting(false);
           return;
         }
       }
       if (tunnelMode === "socks") {
-        await invoke<ConnectResult>("disconnect_socks");
-        clearUi();
+        const result = await invoke<ConnectResult>("disconnect_socks");
+        localOk = result.success;
       }
-      clearUi();
-      setStatusMsg("Disconnected");
     } catch (err) {
-      clearUi();
       setStatusMsg(
-        err instanceof Error ? err.message : "Disconnect failed — approve the macOS admin prompt"
+        err instanceof Error
+          ? err.message
+          : "Disconnect failed — approve the macOS admin prompt"
       );
+      setDisconnecting(false);
+      return;
+    }
+
+    // Only clear UI after local teardown succeeds.
+    setConnected(false);
+    setTunnelMode("");
+    setPeerId("");
+    setDisconnecting(false);
+    setStatusMsg("Disconnected");
+
+    // 2. Server cleanup — fire and forget, best-effort.
+    if (tunnelMode === "wireguard" && peerId) {
+      const token = getStoredToken();
+      if (token) {
+        const del = fetch(`${AUTH_API}/api/v1/wg/peers/${peerId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+          maxRedirections: 0,
+        });
+        const timeout = new Promise<void>((res) => setTimeout(res, 5000));
+        Promise.race([del, timeout]).catch(() => undefined);
+      }
     }
   }, [tunnelMode, peerId]);
 
-  const handleSignOut = useCallback(() => {
+  const handleSignOut = useCallback(async () => {
     if (connected) {
-      handleDisconnect();
+      await handleDisconnect();
+    } else {
+      // The tunnel may have been killed externally (manual process kill)
+      // but the peer still lives on the server. Clean it up now
+      // so the next sign-in doesn't hit "device limit reached".
+      const pid = await invoke<string>("saved_peer_id");
+      if (pid) {
+        const token = getStoredToken();
+        if (token) {
+          const del = fetch(`${AUTH_API}/api/v1/wg/peers/${pid}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+            maxRedirections: 0,
+          });
+          const timeout = new Promise<void>((res) => setTimeout(res, 5000));
+          await Promise.race([del, timeout]).catch(() => undefined);
+          invoke("clear_saved_state");
+        }
+      }
     }
     doSignOut();
     setUser(null);
@@ -420,8 +483,8 @@ function App() {
           Connect
         </button>
       ) : (
-        <button className="btn-disconnect" onClick={handleDisconnect}>
-          Disconnect
+        <button className="btn-disconnect" onClick={handleDisconnect} disabled={disconnecting}>
+          {disconnecting ? "Disconnecting…" : "Disconnect"}
         </button>
       )}
       <button className="btn-signout" onClick={handleSignOut}>

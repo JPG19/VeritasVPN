@@ -106,18 +106,76 @@ fn wireguard_available(app: AppHandle) -> bool {
     resolve_wireguard_go(&app).is_ok()
 }
 
+fn is_process_alive(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn cleanup_stale_state(dir: &std::path::Path) {
+    let _ = std::fs::remove_file(dir.join("wireguard-go.pid"));
+    let _ = std::fs::remove_file(dir.join("iface"));
+    let _ = std::fs::remove_file(dir.join("iface.meta"));
+}
+
 #[tauri::command]
 fn tunnel_status() -> bool {
-    if let Ok(dir) = state_dir() {
-        dir.join("wireguard-go.pid").exists() && dir.join("iface").exists()
-    } else {
-        false
+    let dir = match state_dir() {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+    let pid_file = dir.join("wireguard-go.pid");
+    let iface_file = dir.join("iface");
+    if !pid_file.exists() || !iface_file.exists() {
+        return false;
     }
+    let pid = match std::fs::read_to_string(&pid_file) {
+        Ok(s) => s.trim().parse::<u32>().unwrap_or(0),
+        Err(_) => 0,
+    };
+    if pid == 0 || !is_process_alive(pid) {
+        cleanup_stale_state(&dir);
+        return false;
+    }
+    let iface = match std::fs::read_to_string(&iface_file) {
+        Ok(s) => s.trim().to_string(),
+        Err(_) => {
+            cleanup_stale_state(&dir);
+            return false;
+        }
+    };
+    if iface.is_empty() {
+        cleanup_stale_state(&dir);
+        return false;
+    }
+    let ok = std::process::Command::new("ifconfig")
+        .arg(&iface)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !ok {
+        cleanup_stale_state(&dir);
+        return false;
+    }
+    true
 }
 
 #[tauri::command]
 fn saved_peer_id() -> String {
     peer_id_path().ok().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default().trim().to_string()
+}
+
+#[tauri::command]
+fn clear_saved_state() {
+    if let Ok(dir) = state_dir() {
+        let _ = std::fs::remove_file(dir.join("peer_id"));
+    }
 }
 
 #[tauri::command]
@@ -141,35 +199,59 @@ fn b64_key_to_hex(b64: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn connect_wireguard(app: AppHandle, config: WgTunnelConfig) -> ConnectResult {
-    match bring_up_wireguard(&app, &config) {
-        Ok(msg) => ConnectResult {
+async fn connect_wireguard(app: AppHandle, config: WgTunnelConfig) -> ConnectResult {
+    let peer_id = config.peer_id.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let result = bring_up_wireguard(&app, &config);
+        let _ = tx.send(result);
+    });
+    match rx.recv() {
+        Ok(Ok(msg)) => ConnectResult {
             success: true,
             message: msg,
             mode: "wireguard".into(),
-            peer_id: config.peer_id,
+            peer_id,
         },
-        Err(e) => ConnectResult {
+        Ok(Err(e)) => ConnectResult {
             success: false,
             message: e,
             mode: "wireguard".into(),
-            peer_id: config.peer_id,
+            peer_id,
+        },
+        Err(_) => ConnectResult {
+            success: false,
+            message: "internal error: connection handler panicked".into(),
+            mode: "wireguard".into(),
+            peer_id: String::new(),
         },
     }
 }
 
 #[tauri::command]
-fn disconnect_wireguard(app: AppHandle) -> ConnectResult {
-    match bring_down_wireguard(&app) {
-        Ok(msg) => ConnectResult {
+async fn disconnect_wireguard(app: AppHandle) -> ConnectResult {
+    let app_clone = app.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let result = bring_down_wireguard(&app_clone);
+        let _ = tx.send(result);
+    });
+    match rx.recv() {
+        Ok(Ok(msg)) => ConnectResult {
             success: true,
             message: msg,
             mode: "wireguard".into(),
             peer_id: String::new(),
         },
-        Err(e) => ConnectResult {
+        Ok(Err(e)) => ConnectResult {
             success: false,
             message: e,
+            mode: "wireguard".into(),
+            peer_id: String::new(),
+        },
+        Err(_) => ConnectResult {
+            success: false,
+            message: "internal error: disconnect handler panicked".into(),
             mode: "wireguard".into(),
             peer_id: String::new(),
         },
@@ -378,6 +460,30 @@ route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n add -net 0.0.0.0/1 -interface "$IFACE"
 route -n add -net 128.0.0.0/1 -interface "$IFACE"
+
+# Verify tunnel forwards traffic NOW (after routes installed).
+# If the server can't forward, we must tear down immediately before
+# the user loses internet with no recovery path.
+for _ in $(seq 1 5); do
+  if ping -c 1 -t 1 "$DNS" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
+if ! ping -c 1 -t 1 "$DNS" >/dev/null 2>&1; then
+  echo "tunnel not forwarding after routes — tearing down" >&2
+  route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
+  route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
+  route -n delete -net 0.0.0.0/1 2>/dev/null || true
+  route -n delete -net 128.0.0.0/1 2>/dev/null || true
+  if [[ -n "$ENDPOINT_IP" ]]; then
+    route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
+  fi
+  kill "$(cat "$PID_FILE")" 2>/dev/null || true
+  ifconfig "$IFACE" down 2>/dev/null || true
+  rm -f "$IFACE_FILE" "$PID_FILE" "$META_FILE"
+  exit 1
+fi
 
 # Active network service for DNS (not "first listed").
 SERVICE="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$GW_IF" '
@@ -736,6 +842,7 @@ pub fn run() {
             wireguard_available,
             tunnel_status,
             saved_peer_id,
+            clear_saved_state,
             generate_wg_keys,
             connect_wireguard,
             disconnect_wireguard,
