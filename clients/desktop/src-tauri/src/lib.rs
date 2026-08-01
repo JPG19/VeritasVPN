@@ -292,6 +292,7 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
     for ip in &allowed {
         uapi.push_str(&format!("allowed_ip={}\n", ip.trim()));
     }
+    uapi.push_str("dns=1.1.1.1\n");
     uapi.push('\n');
 
     let uapi_path = dir.join("uapi.txt");
@@ -316,11 +317,6 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
         &iface_file,
         &pid_file,
         &address,
-        if config.dns.trim().is_empty() {
-            "1.1.1.1"
-        } else {
-            config.dns.trim()
-        },
         &endpoint,
     );
 
@@ -345,7 +341,6 @@ fn build_bringup_script(
     iface_file: &Path,
     pid_file: &Path,
     address: &str,
-    dns: &str,
     endpoint: &str,
 ) -> String {
     format!(
@@ -357,7 +352,6 @@ IFACE_FILE='{iface_file}'
 PID_FILE='{pid_file}'
 META_FILE='{iface_file}.meta'
 ADDR='{address}'
-DNS='{dns}'
 ENDPOINT='{endpoint}'
 
 # --- tear down any previous Veritas tunnel (best-effort) ---
@@ -446,28 +440,9 @@ route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n add -net 0.0.0.0/1 -interface "$IFACE"
 route -n add -net 128.0.0.0/1 -interface "$IFACE"
 
-# Active network service for DNS (not "first listed").
-SERVICE="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$GW_IF" '
-  /^\(Hardware Port:/ {{
-    name=$0
-    sub(/^\(Hardware Port: /, "", name)
-    sub(/,.*/, "", name)
-  }}
-  /Device: / {{
-    dev=$2
-    sub(/\).*/, "", dev)
-    if (iface != "" && dev == iface) {{ print name; exit }}
-  }}
-')"
-if [[ -z "$SERVICE" ]]; then
-  SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
-fi
-if [[ -z "$SERVICE" ]]; then SERVICE="Wi-Fi"; fi
-networksetup -setdnsservers "$SERVICE" "$DNS" 2>/dev/null || true
-
 # Persist enough state for a reliable teardown even if the app crashes.
-printf 'endpoint_ip=%s\ngateway=%s\nservice=%s\niface=%s\n' \
-  "$ENDPOINT_IP" "$GW" "$SERVICE" "$IFACE" > "$META_FILE"
+printf 'endpoint_ip=%s\ngateway=%s\niface=%s\n' \
+  "$ENDPOINT_IP" "$GW" "$IFACE" > "$META_FILE"
 
 echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
 "#,
@@ -476,7 +451,6 @@ echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
         iface_file = iface_file.display(),
         pid_file = pid_file.display(),
         address = address,
-        dns = dns,
         endpoint = endpoint,
     )
 }
@@ -535,17 +509,6 @@ fi
 pkill -f '/wireguard-go utun' 2>/dev/null || true
 rm -f /var/run/wireguard/*.sock 2>/dev/null || true
 rm -f "$IFACE_FILE" "$META_FILE"
-
-# Restore DNS on the service we changed, else try common names.
-if [[ -z "$SERVICE" ]]; then
-  SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
-fi
-if [[ -n "$SERVICE" ]]; then
-  networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
-fi
-for S in "Wi-Fi" "Ethernet" "Thunderbolt Ethernet" "USB 10/100/1000 LAN"; do
-  networksetup -setdnsservers "$S" Empty 2>/dev/null || true
-done
 
 echo ok
 "#,

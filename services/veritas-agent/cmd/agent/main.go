@@ -25,6 +25,7 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/veritasvpn/lib/logging"
+	"github.com/veritasvpn/services/veritas-agent/internal/dns"
 	"github.com/veritasvpn/services/veritas-agent/internal/firewall"
 	"github.com/veritasvpn/services/veritas-agent/internal/metrics"
 	"github.com/veritasvpn/services/veritas-agent/internal/peer"
@@ -273,6 +274,13 @@ func urlQueryEscape(s string) string {
 	return strings.ReplaceAll(s, " ", "%20")
 }
 
+func dnsServerFromSubnet(subnet string) string {
+	if subnet == "" {
+		return "10.0.0.1:53"
+	}
+	return strings.Replace(subnet, ".0/24", ".1", 1) + ":53"
+}
+
 type AgentConfig struct {
 	AuthToken       string
 	WGInterface     string
@@ -284,6 +292,7 @@ type AgentConfig struct {
 	ServerRegion    string
 	ServerCity      string
 	ServerCountry   string
+	UpstreamDNS     string
 }
 
 func LoadAgentConfig() *AgentConfig {
@@ -301,6 +310,7 @@ func LoadAgentConfig() *AgentConfig {
 		ServerRegion:    os.Getenv("SERVER_REGION"),
 		ServerCity:      os.Getenv("SERVER_CITY"),
 		ServerCountry:   os.Getenv("SERVER_COUNTRY"),
+		UpstreamDNS:     envOrDefault("UPSTREAM_DNS", "1.1.1.1:53"),
 	}
 }
 
@@ -325,6 +335,7 @@ type Agent struct {
 	startTime     time.Time
 	prevRXBytes   int64
 	prevTXBytes   int64
+	dnsForwarder  *dns.Forwarder
 	wg            sync.WaitGroup
 }
 
@@ -381,6 +392,12 @@ func (a *Agent) Run() error {
 		}
 	}
 
+	dnsListenAddr := dnsServerFromSubnet(a.cfg.WGSubnet)
+	a.dnsForwarder = dns.New(dnsListenAddr, a.cfg.UpstreamDNS, a.logger)
+	if err := a.dnsForwarder.Start(ctx); err != nil {
+		a.logger.Warn("DNS forwarder start failed (non-fatal)", zap.Error(err))
+	}
+
 	a.logger.Info("Registered with wg-manager",
 		zap.String("server_id", resp.ServerID))
 
@@ -426,6 +443,11 @@ func (a *Agent) Run() error {
 	}
 
 	a.wg.Wait()
+
+	a.logger.Info("Shutting down DNS forwarder")
+	if err := a.dnsForwarder.Shutdown(); err != nil {
+		a.logger.Error("DNS forwarder shutdown error", zap.Error(err))
+	}
 
 	a.logger.Info("Cleaning up firewall rules")
 	if err := a.fwManager.Cleanup(); err != nil {
@@ -483,12 +505,18 @@ func (a *Agent) setupFirewall() error {
 	if err := ensureForwardAccept(a.cfg.WGInterface); err != nil {
 		a.logger.Warn("iptables FORWARD accept failed (non-fatal)", zap.Error(err))
 	}
+	if err := ensureMSSClamp(a.cfg.WGInterface); err != nil {
+		a.logger.Warn("iptables MSS clamp failed (non-fatal)", zap.Error(err))
+	}
 
 	if err := a.fwManager.SetupNAT(a.cfg.WGInterface); err != nil {
 		a.logger.Warn("NAT setup failed (non-fatal)", zap.Error(err))
 	}
 	if err := a.fwManager.SetupKillSwitch(a.cfg.WGInterface, a.cfg.WGPort); err != nil {
 		a.logger.Warn("Kill switch setup failed (non-fatal)", zap.Error(err))
+	}
+	if err := a.fwManager.SetupMSSClamp(a.cfg.WGInterface); err != nil {
+		a.logger.Warn("MSS clamping setup failed (non-fatal)", zap.Error(err))
 	}
 
 	a.logger.Info("Firewall rules configured",
@@ -545,6 +573,31 @@ func ensureForwardAccept(wgIface string) error {
 		return err
 	}
 	return iptablesCommand("-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT")
+}
+
+func ensureMSSClamp(wgIface string) error {
+	if wgIface == "" {
+		wgIface = "wg0"
+	}
+	egress := os.Getenv("EGRESS_IFACE")
+	if egress == "" {
+		out, err := exec.Command("sh", "-c", "ip route show default | awk '{print $5; exit}'").Output()
+		if err != nil {
+			return err
+		}
+		egress = strings.TrimSpace(string(out))
+	}
+	if egress == "" {
+		return fmt.Errorf("no egress iface")
+	}
+
+	_ = exec.Command("iptables", "-t", "mangle", "-D", "FORWARD", "-o", wgIface, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu").Run()
+	_ = exec.Command("iptables", "-t", "mangle", "-D", "FORWARD", "-i", wgIface, "-o", egress, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu").Run()
+
+	if err := iptablesCommand("-t", "mangle", "-A", "FORWARD", "-o", wgIface, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu"); err != nil {
+		return err
+	}
+	return iptablesCommand("-t", "mangle", "-A", "FORWARD", "-i", wgIface, "-o", egress, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu")
 }
 
 func (a *Agent) registerWithManager(ctx context.Context) (*RegisterServerResponse, error) {

@@ -49,11 +49,22 @@ func (m *Manager) ensureChain(chain, spec string) {
 func (m *Manager) SetupNAT(iface string) error {
 	egress := os.Getenv("EGRESS_IFACE")
 	if egress == "" {
-		return nil
+		out, err := exec.Command("sh", "-c", "ip route show default | awk '{print $5; exit}'").Output()
+		if err != nil {
+			return fmt.Errorf("detect egress interface: %w", err)
+		}
+		egress = strings.TrimSpace(string(out))
 	}
+	if egress == "" {
+		return fmt.Errorf("no egress iface")
+	}
+
 	m.ensureTable()
 	m.ensureChain("nat", "{ type nat hook postrouting priority srcnat; }")
-	return m.run("add", "rule", "inet", m.tableName, "nat", "oifname", egress, "masquerade")
+
+	m.runIgnore("delete", "rule", "inet", m.tableName, "nat", "iifname", iface, "oifname", egress, "masquerade")
+
+	return m.run("add", "rule", "inet", m.tableName, "nat", "iifname", iface, "oifname", egress, "masquerade")
 }
 
 func (m *Manager) SetupKillSwitch(wgIface string, wgPort int) error {
@@ -80,6 +91,17 @@ func (m *Manager) EnableKillSwitch() error {
 func (m *Manager) DisableKillSwitch() error {
 	m.runIgnore("flush", "chain", "inet", m.tableName, "forward")
 	return m.run("add", "rule", "inet", m.tableName, "forward", "ct", "state", "established,related", "accept")
+}
+
+func (m *Manager) SetupMSSClamp(wgIface string) error {
+	m.ensureTable()
+	m.ensureChain("forward", "{ type filter hook forward priority filter; policy accept; }")
+
+	m.runIgnore("delete", "rule", "inet", m.tableName, "forward", "oifname", wgIface, "tcp", "flags", "syn", "tcp", "option", "maxseg", "size", "set", "1380")
+	m.runIgnore("delete", "rule", "inet", m.tableName, "forward", "iifname", wgIface, "tcp", "flags", "syn", "tcp", "option", "maxseg", "size", "set", "1380")
+
+	m.runIgnore("add", "rule", "inet", m.tableName, "forward", "iifname", wgIface, "tcp", "flags", "syn", "tcp", "option", "maxseg", "size", "set", "1380")
+	return m.run("add", "rule", "inet", m.tableName, "forward", "oifname", wgIface, "tcp", "flags", "syn", "tcp", "option", "maxseg", "size", "set", "1380")
 }
 
 func (m *Manager) Cleanup() error {
