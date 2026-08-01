@@ -148,6 +148,24 @@ export async function registerAnonymous(): Promise<User> {
   );
 }
 
+/** Download the account ID as a .txt file (mirrors the website behavior). */
+export async function downloadAccountFile(): Promise<void> {
+  const token = getStoredToken();
+  if (!token) return;
+  const url = `${AUTH_API}/api/v1/auth/download-account?token=${encodeURIComponent(token)}`;
+  const res = await fetch(url, { maxRedirections: 0 });
+  const text = await res.text();
+  const blob = new Blob([text], { type: "text/plain" });
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = "veritasvpn-account.txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(blobUrl);
+}
+
 export function signOut(): void {
   localStorage.removeItem(STORAGE_KEYS.user);
   localStorage.removeItem(STORAGE_KEYS.accessToken);

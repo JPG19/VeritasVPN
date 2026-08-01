@@ -8,6 +8,7 @@ import {
   signUp as doSignUp,
   signInWithAccountId as doSignInAccountId,
   registerAnonymous as doRegisterAnonymous,
+  downloadAccountFile,
   signOut as doSignOut,
   type User,
 } from "./auth";
@@ -92,6 +93,7 @@ function App() {
             const u = await doRegisterAnonymous();
             setNewAccountId(u.account_id);
             setUser(u);
+            downloadAccountFile();
           }
         } else {
           const fn = mode === "signin" ? doSignIn : doSignUp;
