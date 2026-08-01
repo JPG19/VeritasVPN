@@ -9,8 +9,11 @@
     "shell:allow-spawn",
     "opener:default",
     {
-      "identifier": "http:default",
-      "allow": [{ "url": "https://**" }]
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "https://veritasvpn.cloud/**" },
+        { "url": "https://api.veritasvpn.cloud/**" }
+      ]
     }
   ]
 }
