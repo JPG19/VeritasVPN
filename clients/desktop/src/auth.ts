@@ -44,21 +44,26 @@ async function authAPI(
   body: Record<string, unknown> | string = {}
 ): Promise<AuthResponse> {
   const url = `${AUTH_API}${path}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let data: AuthResponse & AuthError;
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json() as AuthResponse & AuthError;
-    if (!res.ok) {
-      throw new Error(humanizeError(data.error || `Request failed (${res.status})`));
+    data = (await res.json()) as AuthResponse & AuthError;
+  } catch {
+    try {
+      const text = await res.text();
+      data = { error: text || `Request failed (${res.status})` } as AuthResponse & AuthError;
+    } catch {
+      data = { error: `Request failed (${res.status})` } as AuthResponse & AuthError;
     }
-    return data;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e ?? "Unknown error");
-    throw new Error(msg);
   }
+  if (!res.ok) {
+    throw new Error(humanizeError(data.error || `Request failed (${res.status})`));
+  }
+  return data;
 }
 
 function persistSession(user: User, data: AuthResponse): User {
