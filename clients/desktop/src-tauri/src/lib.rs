@@ -446,30 +446,6 @@ route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n add -net 0.0.0.0/1 -interface "$IFACE"
 route -n add -net 128.0.0.0/1 -interface "$IFACE"
 
-# Verify tunnel forwards traffic NOW (after routes installed).
-# If the server can't forward, we must tear down immediately before
-# the user loses internet with no recovery path.
-for _ in $(seq 1 5); do
-  if ping -c 1 -t 1 "$DNS" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 0.5
-done
-if ! ping -c 1 -t 1 "$DNS" >/dev/null 2>&1; then
-  echo "tunnel not forwarding after routes — tearing down" >&2
-  route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
-  route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
-  route -n delete -net 0.0.0.0/1 2>/dev/null || true
-  route -n delete -net 128.0.0.0/1 2>/dev/null || true
-  if [[ -n "$ENDPOINT_IP" ]]; then
-    route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
-  fi
-  kill "$(cat "$PID_FILE")" 2>/dev/null || true
-  ifconfig "$IFACE" down 2>/dev/null || true
-  rm -f "$IFACE_FILE" "$PID_FILE" "$META_FILE"
-  exit 1
-fi
-
 # Active network service for DNS (not "first listed").
 SERVICE="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$GW_IF" '
   /^\(Hardware Port:/ {{
