@@ -50,16 +50,12 @@ async function authAPI(
     body: JSON.stringify(body),
     maxRedirections: 0,
   });
+  const text = await res.text();
   let data: AuthResponse & AuthError;
   try {
-    data = (await res.json()) as AuthResponse & AuthError;
+    data = JSON.parse(text) as AuthResponse & AuthError;
   } catch {
-    try {
-      const text = await res.text();
-      data = { error: text || `Request failed (${res.status})` } as AuthResponse & AuthError;
-    } catch {
-      data = { error: `Request failed (${res.status})` } as AuthResponse & AuthError;
-    }
+    data = { error: text || `Request failed (${res.status})` } as AuthResponse & AuthError;
   }
   if (!res.ok) {
     throw new Error(humanizeError(data.error || `Request failed (${res.status})`));
