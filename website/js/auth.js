@@ -494,10 +494,6 @@ function renderUser(user) {
     setError('');
 
     if (mode === 'anon-signup') {
-      const frame = document.createElement('iframe');
-      frame.style.display = 'none';
-      document.body.appendChild(frame);
-
       setBusy(true);
       try {
         const data = await registerAnonymous();
@@ -506,8 +502,13 @@ function renderUser(user) {
         currentUser = user;
         updateNavbar(user);
 
-        frame.src = `${AUTH_API}/api/v1/auth/download-account?token=${encodeURIComponent(data.access_token)}`;
-        setTimeout(() => { try { document.body.removeChild(frame); } catch(_){} }, 5000);
+        const dl = document.createElement('a');
+        dl.href = `${AUTH_API}/api/v1/auth/download-account?token=${encodeURIComponent(data.access_token)}`;
+        dl.download = 'veritasvpn-account.txt';
+        dl.style.display = 'none';
+        document.body.appendChild(dl);
+        dl.click();
+        setTimeout(() => { try { document.body.removeChild(dl); } catch(_){} }, 5000);
 
         setError(`Account created. Account ID: <strong>${data.account_id}</strong> — check your downloads.`, { success: true });
         setTimeout(() => {
@@ -516,7 +517,6 @@ function renderUser(user) {
         }, 800);
       } catch (err) {
         setError(mapAuthError(err.message));
-        try { document.body.removeChild(frame); } catch(_) {}
       } finally {
         setBusy(false);
       }
