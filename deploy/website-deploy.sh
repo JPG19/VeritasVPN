@@ -35,10 +35,7 @@ log "  Remote: ${REMOTE:0:8}"
 
 git reset --hard "origin/$BRANCH" 2>&1 | tee -a "$LOG_FILE"
 
-log "Reloading nginx..."
-docker exec veritasvpn-nginx-1 nginx -s reload 2>&1 || {
-    log "WARN: nginx reload failed, restarting container..."
-    docker restart veritasvpn-nginx-1 2>&1
-}
+log "Restarting nginx..."
+docker restart veritasvpn-nginx-1 2>&1 | tee -a "$LOG_FILE"
 
 log "Deploy complete."
