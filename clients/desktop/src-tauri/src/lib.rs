@@ -311,6 +311,11 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
     .ok();
     fs::write(peer_id_path()?, config.peer_id.as_bytes()).ok();
 
+    #[cfg(target_os = "macos")]
+    let service = get_active_network_service().unwrap_or_default();
+    #[cfg(not(target_os = "macos"))]
+    let service = String::new();
+
     let script = build_bringup_script(
         &wg_go,
         &uapi_path,
@@ -318,6 +323,7 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
         &pid_file,
         &address,
         &endpoint,
+        &service,
     );
 
     fs::write(&script_path, script).map_err(|e| format!("write script: {e}"))?;
@@ -342,6 +348,7 @@ fn build_bringup_script(
     pid_file: &Path,
     address: &str,
     endpoint: &str,
+    service: &str,
 ) -> String {
     format!(
         r#"#!/bin/bash
@@ -353,6 +360,7 @@ PID_FILE='{pid_file}'
 META_FILE='{iface_file}.meta'
 ADDR='{address}'
 ENDPOINT='{endpoint}'
+SERVICE='{service}'
 
 # --- tear down any previous Veritas tunnel (best-effort) ---
 if [[ -f "$PID_FILE" ]]; then
@@ -440,9 +448,17 @@ route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n add -net 0.0.0.0/1 -interface "$IFACE"
 route -n add -net 128.0.0.0/1 -interface "$IFACE"
 
+# Set system DNS servers
+if [[ -n "$SERVICE" ]]; then
+  networksetup -setdnsservers "$SERVICE" 1.1.1.1
+  # Force DNS traffic through the VPN tunnel
+  sleep 0.5
+  route -n add 1.1.1.1/32 -interface "$IFACE" 2>/dev/null || true
+fi
+
 # Persist enough state for a reliable teardown even if the app crashes.
-printf 'endpoint_ip=%s\ngateway=%s\niface=%s\n' \
-  "$ENDPOINT_IP" "$GW" "$IFACE" > "$META_FILE"
+printf 'endpoint_ip=%s\ngateway=%s\niface=%s\nservice=%s\n' \
+  "$ENDPOINT_IP" "$GW" "$IFACE" "$SERVICE" > "$META_FILE"
 
 echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
 "#,
@@ -452,6 +468,7 @@ echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
         pid_file = pid_file.display(),
         address = address,
         endpoint = endpoint,
+        service = service,
     )
 }
 
@@ -498,6 +515,13 @@ route -n delete -net 128.0.0.0/1 2>/dev/null || true
 if [[ -n "$ENDPOINT_IP" ]]; then
   route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
 fi
+
+# Reset DNS servers
+if [[ -n "$SERVICE" ]]; then
+  networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
+fi
+# Remove DNS forced route
+route -n delete 1.1.1.1/32 2>/dev/null || true
 
 # Stop userspace WireGuard.
 if [[ -f "$PID_FILE" ]]; then
