@@ -88,3 +88,10 @@ website/downloads/veritasvpn-linux.*
 deploy/security/.env.prod
 deploy/k8s/base/secrets.yaml
 deploy/k8s/btcpay/secrets.yaml
+
+# Downloaded binaries (local only)
+website/downloads/*.zip
+website/downloads/*.exe
+website/downloads/veritasvpn-windows-early-access
+website/veritasvpn-windows.zip
+services/veritas-agent/agent
