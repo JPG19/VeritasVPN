@@ -95,3 +95,5 @@ website/downloads/*.exe
 website/downloads/veritasvpn-windows-early-access
 website/veritasvpn-windows.zip
 services/veritas-agent/agent
+
+services/wg-manager/server
