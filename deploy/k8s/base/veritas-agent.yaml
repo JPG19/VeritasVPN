@@ -50,6 +50,8 @@ spec:
                 - NET_RAW
                 - SYS_MODULE
           env:
+            - name: FIREWALL_BACKEND
+              value: "iptables"
             - name: AGENT_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:

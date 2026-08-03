@@ -509,6 +509,13 @@ func (a *Agent) setupFirewall() error {
 		a.logger.Warn("iptables MSS clamp failed (non-fatal)", zap.Error(err))
 	}
 
+	if os.Getenv("FIREWALL_BACKEND") == "iptables" {
+		a.logger.Info("Firewall rules configured (iptables-only)",
+			zap.String("interface", a.cfg.WGInterface),
+			zap.Int("port", a.cfg.WGPort))
+		return nil
+	}
+
 	if err := a.fwManager.SetupNAT(a.cfg.WGInterface); err != nil {
 		a.logger.Warn("NAT setup failed (non-fatal)", zap.Error(err))
 	}
