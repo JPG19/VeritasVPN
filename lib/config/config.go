@@ -35,6 +35,9 @@ type Config struct {
 
 	AgentAuthToken string
 
+	ResendAPIKey string
+	PublicBaseURL string
+
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
 }
@@ -66,6 +69,9 @@ func Load() *Config {
 		BillingPublicURL:     envOrDefault("BILLING_PUBLIC_URL", "http://localhost:8083"),
 
 		AgentAuthToken: envRequired("AGENT_AUTH_TOKEN"),
+
+		ResendAPIKey: os.Getenv("RESEND_API_KEY"),
+		PublicBaseURL: envOrDefault("PUBLIC_BASE_URL", "https://veritasvpn.cloud"),
 
 		AccessTokenTTL:  durationEnvOrDefault("ACCESS_TOKEN_TTL", 1*time.Hour),
 		RefreshTokenTTL: durationEnvOrDefault("REFRESH_TOKEN_TTL", 30*24*time.Hour),

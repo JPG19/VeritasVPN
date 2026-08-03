@@ -73,6 +73,18 @@ spec:
                 configMapKeyRef:
                   name: veritas-config
                   key: CORS_ORIGINS
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: veritas-secrets
+                  key: RESEND_API_KEY
+                  optional: true
+            - name: PUBLIC_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: veritas-config
+                  key: PUBLIC_BASE_URL
+                  optional: true
           readinessProbe:
             httpGet:
               path: /healthz

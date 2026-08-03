@@ -8,8 +8,10 @@ import (
 	"time"
 
 	libcrypto "github.com/veritasvpn/lib/crypto"
+	"github.com/veritasvpn/lib/config"
 	jwtlib "github.com/veritasvpn/lib/jwt"
 	"github.com/veritasvpn/lib/logging"
+	"github.com/veritasvpn/services/auth-svc/internal/email"
 	"github.com/veritasvpn/services/auth-svc/internal/model"
 	"github.com/veritasvpn/services/auth-svc/internal/repository"
 	"go.uber.org/zap"
@@ -20,10 +22,12 @@ type AuthService struct {
 	db    *repository.Postgres
 	redis *repository.Redis
 	jwt   *jwtlib.Manager
+	email *email.Client
+	cfg   *config.Config
 }
 
-func New(log *logging.Logger, db *repository.Postgres, redis *repository.Redis, jwt *jwtlib.Manager) *AuthService {
-	return &AuthService{log: log, db: db, redis: redis, jwt: jwt}
+func New(log *logging.Logger, db *repository.Postgres, redis *repository.Redis, jwt *jwtlib.Manager, emailClient *email.Client, cfg *config.Config) *AuthService {
+	return &AuthService{log: log, db: db, redis: redis, jwt: jwt, email: emailClient, cfg: cfg}
 }
 
 func hashInput(input string) string {
@@ -270,8 +274,8 @@ func (s *AuthService) SignInWithEmail(ctx context.Context, email, password strin
 	return accessToken, refreshToken, acc.ID, expiresAt, nil
 }
 
-func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) error {
-	acc, err := s.db.GetAccountByEmail(ctx, email)
+func (s *AuthService) RequestPasswordReset(ctx context.Context, emailAddr string) error {
+	acc, err := s.db.GetAccountByEmail(ctx, emailAddr)
 	if err != nil {
 		return nil
 	}
@@ -290,7 +294,33 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) er
 		zap.String("account_id", acc.ID),
 	)
 
+	if s.email != nil {
+		resetURL := fmt.Sprintf("%s/reset-password?token=%s", s.cfg.PublicBaseURL, token)
+		if err := s.email.Send(ctx, email.SendRequest{
+			From:    "VeritasVPN <noreply@veritasvpn.cloud>",
+			To:      emailAddr,
+			Subject: "Reset your VeritasVPN password",
+			HTML:    resetEmailHTML(resetURL),
+		}); err != nil {
+			s.log.Error("failed to send reset email", zap.Error(err))
+		} else {
+			s.log.Info("reset email sent", zap.String("account_id", acc.ID))
+		}
+	}
+
 	return nil
+}
+
+func resetEmailHTML(resetURL string) string {
+	return `<!DOCTYPE html>
+<html>
+<body style="font-family: sans-serif; background: #0a0a0f; color: #e0e0e0; padding: 40px; text-align: center;">
+  <h2 style="color: #00d2ff;">VeritasVPN</h2>
+  <p>You requested a password reset. Click the button below to set a new password. This link expires in 1 hour.</p>
+  <a href="` + resetURL + `" style="display: inline-block; margin: 20px 0; padding: 14px 32px; background: linear-gradient(135deg, #00d2ff, #7b61ff); color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600;">Reset Password</a>
+  <p style="color: #888; font-size: 13px;">If you did not request this, you can safely ignore this email.</p>
+</body>
+</html>`
 }
 
 func (s *AuthService) ResetPassword(ctx context.Context, resetToken, newPassword string) error {

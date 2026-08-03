@@ -8,6 +8,7 @@ data:
   LOG_LEVEL: "debug"
   LOG_FORMAT: "console"
   CORS_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000"
+  PUBLIC_BASE_URL: "https://veritasvpn.cloud"
 
   POSTGRES_DB: "veritas"
   POSTGRES_USER: "veritas"

@@ -19,6 +19,7 @@ import (
 	"github.com/veritasvpn/services/auth-svc/internal/handler"
 	"github.com/veritasvpn/services/auth-svc/internal/middleware"
 	"github.com/veritasvpn/services/auth-svc/internal/repository"
+	"github.com/veritasvpn/services/auth-svc/internal/email"
 	"github.com/veritasvpn/services/auth-svc/internal/service"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -56,7 +57,12 @@ func main() {
 
 	db := repository.NewPostgres(dbPool)
 	jwtMgr := jwtlib.NewManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
-	svc := service.New(log, db, redisClient, jwtMgr)
+	var emailClient *email.Client
+	if cfg.ResendAPIKey != "" {
+		emailClient = email.NewClient(cfg.ResendAPIKey)
+		log.Info("resend email client configured")
+	}
+	svc := service.New(log, db, redisClient, jwtMgr, emailClient, cfg)
 	authHandler := handler.NewAuthHandler(log, svc)
 	authInterceptor := middleware.NewAuthInterceptor(log, jwtMgr, redisClient)
 

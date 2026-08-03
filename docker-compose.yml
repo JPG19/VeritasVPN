@@ -50,6 +50,8 @@ services:
       LOG_FORMAT: console
       ENVIRONMENT: development
       CORS_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://veritasvpn.cloud}
     depends_on:
       postgres:
         condition: service_healthy
