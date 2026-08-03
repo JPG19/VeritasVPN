@@ -225,6 +225,10 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   const switchHint = document.getElementById('authSwitchHint');
   const anonSignupBtn = document.getElementById('authAnonSignup');
   const anonSigninBtn = document.getElementById('authAnonSignin');
+  const forgotView = document.getElementById('authForgot');
+  const forgotBackBtn = document.getElementById('authForgotBack');
+  const forgotSubmit = document.getElementById('authForgotSubmit');
+  const forgotEmail = document.getElementById('authForgotEmail');
   const loggedOut = document.getElementById('navAuthLoggedOut');
   const loggedIn = document.getElementById('navAuthLoggedIn');
   const userEmailEl = document.getElementById('navUserEmail');
@@ -297,7 +301,20 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
         const pwLabel = passwordInput.closest('.auth-field');
         if (pwLabel) pwLabel.style.display = 'none';
       }
+    } else if (mode === 'forgot') {
+      if (titleEl) titleEl.textContent = 'Reset password';
+      if (formFields) formFields.style.display = 'none';
+      if (resetBtn) resetBtn.hidden = true;
+      if (submitBtn) submitBtn.hidden = true;
+      if (switchHint) switchHint.hidden = true;
+      if (anonSignupBtn) anonSignupBtn.hidden = true;
+      if (anonSigninBtn) anonSigninBtn.hidden = true;
+      tabs.forEach(t => { t.hidden = true; });
+      if (forgotView) forgotView.classList.add('is-active');
     } else {
+      if (forgotView) forgotView.classList.remove('is-active');
+      if (tabs) tabs.forEach(t => { t.hidden = false; });
+      if (submitBtn) submitBtn.hidden = false;
       if (titleEl) titleEl.textContent = isSignIn ? 'Sign in' : 'Create account';
       if (submitBtn) {
         submitBtn.textContent = isSignIn ? 'Sign in' : 'Create account';
@@ -491,6 +508,7 @@ function renderUser(user) {
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (busy) return;
+    if (mode === 'forgot') return;
     setError('');
 
     if (mode === 'anon-signup') {
@@ -572,12 +590,12 @@ function renderUser(user) {
     }
   });
 
-  resetBtn?.addEventListener('click', async (e) => {
+  forgotSubmit?.addEventListener('click', async (e) => {
     e.preventDefault();
     if (busy) return;
-    const email = emailInput?.value.trim() || '';
+    const email = forgotEmail?.value.trim() || '';
     if (!email) {
-      setError('Enter your email above, then click "Forgot password".');
+      setError('Enter your email to receive a reset link.');
       return;
     }
     setBusy(true);
@@ -593,6 +611,20 @@ function renderUser(user) {
     } finally {
       setBusy(false);
     }
+  });
+
+  forgotBackBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    setError('');
+    setMode('signin');
+  });
+
+  resetBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (busy) return;
+    setError('');
+    setMode('forgot');
+    if (forgotEmail) forgotEmail.value = emailInput?.value || '';
   });
 
   userMenuBtn?.addEventListener('click', (e) => {

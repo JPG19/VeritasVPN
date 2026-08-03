@@ -84,6 +84,11 @@
                 <button type="submit" class="btn btn-primary btn-block" id="authSubmit">Sign in</button>
                 <p class="auth-note is-hidden" id="authAnonNote">This account ID will be shown only once. A .txt file will download automatically.</p>
             </form>
+            <div id="authForgot" class="auth-forgot">
+                <label class="auth-field"><span>Email</span><input type="email" id="authForgotEmail" required></label>
+                <button type="button" class="btn btn-primary btn-block" id="authForgotSubmit">Send reset link</button>
+                <button type="button" class="auth-forgot-back" id="authForgotBack">Back to sign in</button>
+            </div>
             <button type="button" class="auth-anon-link" id="authAnonSignup">Skip email — create anonymous account</button>
             <button type="button" class="auth-anon-link" id="authAnonSignin" hidden>Sign in with Account ID instead</button>
             <div class="auth-divider"><span>or</span></div>

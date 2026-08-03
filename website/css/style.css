@@ -1038,9 +1038,25 @@ body.auth-modal-open { overflow: hidden; }
   cursor: pointer;
   text-align: center;
 }
-.auth-anon-link:hover { border-color: var(--leaf); color: var(--paper); }
+.auth-anon-link:hover { color: var(--paper); }
 .auth-anon-link[hidden],
 .auth-anon-link.hidden { display: none; }
+
+/* —— Forgot password view —— */
+.auth-forgot { display: none; }
+.auth-forgot.is-active { display: block; }
+.auth-forgot-back {
+  display: block;
+  background: none;
+  border: none;
+  color: var(--paper-dim);
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 16px;
+  text-align: center;
+  width: 100%;
+}
+.auth-forgot-back:hover { color: var(--leaf); }
 
 /* —— Misc pages that share style.css —— */
 .trust-bar, .features, .how-it-works, .transparency, .pricing, .downloads, .faq {
