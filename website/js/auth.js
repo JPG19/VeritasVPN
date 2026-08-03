@@ -342,7 +342,9 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
         emailInput.autocomplete = isSignIn ? 'email' : 'email';
       }
       if (passwordInput) {
-        passwordInput.closest('label').hidden = false;
+        passwordInput.required = true;
+        const pwLabel = passwordInput.closest('.auth-field') || passwordInput.closest('label');
+        if (pwLabel) { pwLabel.hidden = false; pwLabel.style.display = ''; }
         passwordInput.autocomplete = isSignIn ? 'current-password' : 'new-password';
       }
       if (switchHint) {
