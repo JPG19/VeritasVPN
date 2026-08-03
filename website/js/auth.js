@@ -310,10 +310,14 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       if (anonSignupBtn) anonSignupBtn.hidden = true;
       if (anonSigninBtn) anonSigninBtn.hidden = true;
       tabs.forEach(t => { t.hidden = true; });
-      if (forgotView) forgotView.classList.add('is-active');
+      const divider = document.querySelector('.auth-divider');
+      if (divider) divider.hidden = true;
+      if (forgotView) forgotView.hidden = false;
     } else {
-      if (forgotView) forgotView.classList.remove('is-active');
+      if (forgotView) forgotView.hidden = true;
       if (tabs) tabs.forEach(t => { t.hidden = false; });
+      const divider = document.querySelector('.auth-divider');
+      if (divider) divider.hidden = false;
       if (submitBtn) submitBtn.hidden = false;
       if (titleEl) titleEl.textContent = isSignIn ? 'Sign in' : 'Create account';
       if (submitBtn) {
