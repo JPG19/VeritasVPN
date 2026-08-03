@@ -306,6 +306,8 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       if (titleEl) titleEl.textContent = 'Reset password';
       if (form) form.hidden = true;
       if (tabsContainer) tabsContainer.hidden = true;
+      const brand = document.querySelector('.auth-brand');
+      if (brand) brand.hidden = true;
       if (switchHint) switchHint.hidden = true;
       if (anonSignupBtn) anonSignupBtn.hidden = true;
       if (anonSigninBtn) anonSigninBtn.hidden = true;
@@ -316,6 +318,8 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       if (forgotView) forgotView.hidden = true;
       if (form) form.hidden = false;
       if (tabsContainer) tabsContainer.hidden = false;
+      const brand = document.querySelector('.auth-brand');
+      if (brand) brand.hidden = false;
       if (tabs) tabs.forEach(t => { t.hidden = false; });
       const divider = document.querySelector('.auth-divider');
       if (divider) divider.hidden = false;
