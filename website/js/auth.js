@@ -214,6 +214,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
   const tabs = document.querySelectorAll('[data-auth-tab]');
   const form = document.getElementById('authForm');
   const formFields = document.getElementById('authFormFields');
+  const tabsContainer = document.querySelector('.auth-tabs');
   const emailInput = document.getElementById('authEmail');
   const passwordInput = document.getElementById('authPassword');
   const submitBtn = document.getElementById('authSubmit');
@@ -303,18 +304,18 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       }
     } else if (mode === 'forgot') {
       if (titleEl) titleEl.textContent = 'Reset password';
-      if (formFields) formFields.hidden = true;
-      if (resetBtn) resetBtn.hidden = true;
-      if (submitBtn) submitBtn.hidden = true;
+      if (form) form.hidden = true;
+      if (tabsContainer) tabsContainer.hidden = true;
       if (switchHint) switchHint.hidden = true;
       if (anonSignupBtn) anonSignupBtn.hidden = true;
       if (anonSigninBtn) anonSigninBtn.hidden = true;
-      tabs.forEach(t => { t.hidden = true; });
       const divider = document.querySelector('.auth-divider');
       if (divider) divider.hidden = true;
       if (forgotView) forgotView.hidden = false;
     } else {
       if (forgotView) forgotView.hidden = true;
+      if (form) form.hidden = false;
+      if (tabsContainer) tabsContainer.hidden = false;
       if (tabs) tabs.forEach(t => { t.hidden = false; });
       const divider = document.querySelector('.auth-divider');
       if (divider) divider.hidden = false;
