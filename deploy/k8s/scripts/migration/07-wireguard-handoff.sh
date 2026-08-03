@@ -16,13 +16,13 @@ wg show > /tmp/wg-pre-migration.txt
 cat /tmp/wg-pre-migration.txt
 
 echo "Copying WireGuard keys to k3s-compatible path..."
-mkdir -p /opt/veritasvpn/data/wireguard
-if [ -d /opt/veritasvpn/data/wireguard ]; then
-  cp -rp /opt/veritasvpn/data/wireguard/* /opt/veritasvpn/data/wireguard/ 2>/dev/null || true
-  chmod -R 700 /opt/veritasvpn/data/wireguard
-elif [ -d data/wireguard ]; then
-  cp -rp data/wireguard/* /opt/veritasvpn/data/wireguard/ 2>/dev/null || true
-  chmod -R 700 /opt/veritasvpn/data/wireguard
+mkdir -p "$REPO_ROOT/data/wireguard"
+if [ -d "$REPO_ROOT/data/wireguard" ] && [ "$(ls -A "$REPO_ROOT/data/wireguard" 2>/dev/null)" ]; then
+  echo "  WireGuard keys already present"
+else
+  echo "  ERROR: WireGuard keys not found at $REPO_ROOT/data/wireguard/"
+  echo "  Please copy your private key before continuing"
+  exit 1
 fi
 
 echo "Stopping compose veritas-agent..."

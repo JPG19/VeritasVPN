@@ -20,7 +20,7 @@ data:
   NATS_HOST: "nats"
   NATS_PORT: "4222"
 
-  PUBLIC_IP: "REDACTED_IP"
+  PUBLIC_IP: "change-me-or-set-to-your-vps-ip"
   SERVER_HOSTNAME: "linuxdesktop"
   SERVER_REGION: "sa"
   SERVER_CITY: "local"

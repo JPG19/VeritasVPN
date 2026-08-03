@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Auto-deploy: pull latest from GitHub and update the website.
-# The Docker nginx mounts /opt/veritasvpn/website directly,
+# The Docker nginx mounts the website directory directly,
 # so changes take effect immediately after pull.
 
 set -euo pipefail
 
-REPO_DIR="/opt/veritasvpn"
+REPO_DIR="${REPO_ROOT:-/opt/veritasvpn}"
 BRANCH="master"
 LOG_FILE="/var/log/veritas-deploy.log"
 
