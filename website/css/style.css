@@ -1043,6 +1043,11 @@ body.auth-modal-open { overflow: hidden; }
 .auth-anon-link.hidden { display: none; }
 
 /* —— Forgot password view —— */
+#authForm[hidden],
+.auth-tabs[hidden],
+.auth-brand[hidden] {
+  display: none !important;
+}
 .auth-forgot-back {
   display: block;
   background: none;
