@@ -277,7 +277,7 @@ func (s *AuthService) SignInWithEmail(ctx context.Context, email, password strin
 func (s *AuthService) RequestPasswordReset(ctx context.Context, emailAddr string) error {
 	acc, err := s.db.GetAccountByEmail(ctx, emailAddr)
 	if err != nil {
-		return nil
+		return fmt.Errorf("no account found with this email")
 	}
 
 	token, err := libcrypto.GenerateResetToken()

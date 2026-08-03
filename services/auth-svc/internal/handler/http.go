@@ -224,8 +224,8 @@ func (h *HTTPHandler) handleResetPassword(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := h.service.RequestPasswordReset(r.Context(), req.Email); err != nil {
-		h.log.Error("password reset request failed", zap.Error(err))
-		writeHTTPError(w, http.StatusInternalServerError, "failed to process request")
+		h.log.Warn("password reset request failed", zap.Error(err))
+		writeHTTPError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
