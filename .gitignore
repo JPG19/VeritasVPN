@@ -74,10 +74,12 @@ cloudflared
 # Cloudflared credentials
 .cloudflared-credentials.json
 
+# Wrangler (Cloudflare Pages local state)
+.wrangler/
+
 # BTCPay secrets
 btcpay/.env
 containers/proxy-gateway/data/
-website/downloads/veritasvpn-linux.*
 
 # Deployment backups and runtime data
 /backups/
@@ -90,10 +92,6 @@ deploy/k8s/base/secrets.yaml
 deploy/k8s/btcpay/secrets.yaml
 
 # Downloaded binaries (local only)
-website/downloads/*.zip
-website/downloads/*.exe
-website/downloads/veritasvpn-windows-early-access
-website/veritasvpn-windows.zip
 services/veritas-agent/agent
 
 services/wg-manager/server
