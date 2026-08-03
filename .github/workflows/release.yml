@@ -86,10 +86,23 @@ jobs:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
+
+      - name: Rename assets to fixed names
+        run: |
+          # macOS
+          DMG=$(ls veritasvpn-macos/*.dmg | head -1)
+          cp "$DMG" VeritasVPN-macOS.dmg
+
+          # Linux
+          DEB=$(ls veritasvpn-linux-deb/*.deb | head -1)
+          cp "$DEB" VeritasVPN-Linux.deb
+          AI=$(ls veritasvpn-linux-appimage/*.AppImage | head -1)
+          cp "$AI" VeritasVPN-Linux.AppImage
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            veritasvpn-macos/*.dmg
-            veritasvpn-linux-deb/*.deb
-            veritasvpn-linux-appimage/*.AppImage
+            VeritasVPN-macOS.dmg
+            VeritasVPN-Linux.deb
+            VeritasVPN-Linux.AppImage
