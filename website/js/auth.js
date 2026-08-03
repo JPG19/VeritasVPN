@@ -299,11 +299,11 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
         passwordInput.required = false;
         passwordInput.value = '';
         const pwLabel = passwordInput.closest('.auth-field');
-        if (pwLabel) pwLabel.style.display = 'none';
+        if (pwLabel) pwLabel.hidden = true;
       }
     } else if (mode === 'forgot') {
       if (titleEl) titleEl.textContent = 'Reset password';
-      if (formFields) formFields.style.display = 'none';
+      if (formFields) formFields.hidden = true;
       if (resetBtn) resetBtn.hidden = true;
       if (submitBtn) submitBtn.hidden = true;
       if (switchHint) switchHint.hidden = true;
@@ -324,7 +324,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
         submitBtn.textContent = isSignIn ? 'Sign in' : 'Create account';
         submitBtn.className = 'btn btn-primary btn-block';
       }
-      if (formFields) formFields.hidden = false;
+      if (formFields) { formFields.hidden = false; formFields.style.display = ''; }
       if (resetBtn) resetBtn.hidden = !isSignIn;
       if (switchHint) { switchHint.hidden = false; switchHint.textContent = 'Don\'t have an account? Sign up'; }
       if (anonSignupBtn) anonSignupBtn.hidden = isSignIn;
@@ -344,7 +344,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       if (passwordInput) {
         passwordInput.required = true;
         const pwLabel = passwordInput.closest('.auth-field') || passwordInput.closest('label');
-        if (pwLabel) { pwLabel.hidden = false; pwLabel.style.display = ''; }
+        if (pwLabel) pwLabel.hidden = false;
         passwordInput.autocomplete = isSignIn ? 'current-password' : 'new-password';
       }
       if (switchHint) {
