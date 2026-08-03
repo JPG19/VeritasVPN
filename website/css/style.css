@@ -122,6 +122,12 @@ button { font-family: inherit; }
   filter: brightness(1.08);
   transform: translateY(-1px);
 }
+.btn-primary.is-disabled {
+  background: var(--ink-3);
+  color: var(--paper-dim);
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .btn-outline {
   background: transparent;
   color: var(--paper);
@@ -698,7 +704,7 @@ button { font-family: inherit; }
 /* —— Downloads teaser —— */
 .download-featured {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 .download-featured-card {
@@ -708,10 +714,21 @@ button { font-family: inherit; }
   border-radius: var(--radius-xl);
   background: var(--ink-2);
   transition: border-color 0.2s, transform 0.2s;
+  text-decoration: none;
+  color: inherit;
 }
 .download-featured-card:hover {
   border-color: rgba(0, 210, 255, 0.5);
   transform: translateY(-2px);
+}
+.download-featured-card[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+.download-featured-card[aria-disabled="true"]:hover {
+  border-color: var(--line);
+  transform: none;
 }
 .download-featured-badge {
   display: inline-block;
@@ -1071,7 +1088,7 @@ body.auth-modal-open { overflow: hidden; }
     gap: 8px;
   }
   .footer-grid { grid-template-columns: 1fr 1fr; }
-  .download-featured { grid-template-columns: 1fr; }
+  .download-featured { grid-template-columns: 1fr 1fr; }
   .download-groups { grid-template-columns: 1fr; }
 }
 
