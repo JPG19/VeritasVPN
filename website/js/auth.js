@@ -269,7 +269,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       }
       if (formFields) formFields.hidden = true;
       if (resetBtn) resetBtn.hidden = true;
-      if (switchHint) switchHint.hidden = true;
+      if (switchHint) { switchHint.hidden = false; switchHint.textContent = 'Sign in with email and password'; }
       if (anonSignupBtn) anonSignupBtn.hidden = true;
       if (anonSigninBtn) anonSigninBtn.hidden = true;
       if (anonNote) anonNote.classList.remove('is-hidden');
@@ -281,7 +281,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       }
       if (formFields) formFields.hidden = false;
       if (resetBtn) resetBtn.hidden = true;
-      if (switchHint) switchHint.hidden = true;
+      if (switchHint) { switchHint.hidden = false; switchHint.textContent = 'Sign in with email and password'; }
       if (anonSignupBtn) anonSignupBtn.hidden = true;
       if (anonSigninBtn) anonSigninBtn.hidden = true;
       const emailLabel = emailInput?.closest('.auth-field');
@@ -326,7 +326,7 @@ export function initAuthUI({ redirectAfterAuth = true } = {}) {
       }
       if (formFields) formFields.hidden = false;
       if (resetBtn) resetBtn.hidden = !isSignIn;
-      if (switchHint) switchHint.hidden = false;
+      if (switchHint) { switchHint.hidden = false; switchHint.textContent = 'Don\'t have an account? Sign up'; }
       if (anonSignupBtn) anonSignupBtn.hidden = isSignIn;
       if (anonSigninBtn) anonSigninBtn.hidden = !isSignIn;
       if (anonNote) anonNote.classList.add('is-hidden');
@@ -493,7 +493,7 @@ function renderUser(user) {
   switchHint?.addEventListener('click', (e) => {
     e.preventDefault();
     if (mode.startsWith('anon-')) {
-      setMode(mode === 'anon-signin' ? 'anon-signup' : 'anon-signin');
+      setMode('signin');
     } else {
       setMode(mode === 'signin' ? 'signup' : 'signin');
     }
