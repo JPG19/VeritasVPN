@@ -19,7 +19,20 @@
   </main>
   <script type="module">
     import { forceRefreshAccessToken } from '../js/auth.js';
-    forceRefreshAccessToken().catch(() => {});
+
+    async function refreshAndRedirect() {
+      try { await forceRefreshAccessToken(); } catch (_) {}
+
+      if (window.opener && !window.opener.closed) {
+        window.opener.location.href = '/account/#/subscription';
+        window.close();
+        return;
+      }
+
+      window.location.replace('/account/#/subscription');
+    }
+
+    setTimeout(refreshAndRedirect, 1500);
   </script>
 </body>
 </html>
