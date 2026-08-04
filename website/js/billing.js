@@ -57,17 +57,26 @@ function setPlanBadge(status) {
   badge.classList.toggle('is-premium', Boolean(status.is_premium));
 }
 
+function setUpgradeButtonsVisible(visible) {
+  document.querySelectorAll('[data-billing-checkout]').forEach((btn) => {
+    btn.hidden = !visible;
+  });
+}
+
 async function refreshStatus() {
   if (!auth.currentUser) {
     setPlanBadge(null);
+    setUpgradeButtonsVisible(true);
     return;
   }
   try {
     const status = await fetchBillingStatus();
     setPlanBadge(status);
+    setUpgradeButtonsVisible(!status.is_premium);
   } catch (err) {
     console.warn('billing status:', err);
     setPlanBadge({ is_premium: false });
+    setUpgradeButtonsVisible(true);
   }
 }
 

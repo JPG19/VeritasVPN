@@ -68,6 +68,8 @@ async function refreshBilling() {
 
 function renderHome() {
   const premium = Boolean(billingStatus?.is_premium);
+  const cancelAtEnd = Boolean(billingStatus?.cancel_at_period_end);
+  const showCheckout = !premium || cancelAtEnd;
   const end = formatDate(billingStatus?.current_period_end);
   return `
     ${renderFlash()}
@@ -131,9 +133,9 @@ function renderHome() {
           <li>Priority support while we expand</li>
         </ul>
         <div class="account-actions">
-          <button type="button" class="btn btn-primary" data-action="checkout">
+          ${showCheckout ? `<button type="button" class="btn btn-primary" data-action="checkout">
             ${premium ? 'Renew with Bitcoin' : 'Upgrade with Bitcoin'}
-          </button>
+          </button>` : ''}
           <a class="btn btn-outline" href="#/downloads">Get apps</a>
         </div>
       </div>
@@ -143,6 +145,8 @@ function renderHome() {
 
 function renderSubscription() {
   const premium = Boolean(billingStatus?.is_premium);
+  const cancelAtEnd = Boolean(billingStatus?.cancel_at_period_end);
+  const showCheckout = !premium || cancelAtEnd;
   const end = formatDate(billingStatus?.current_period_end);
   return `
     ${renderFlash()}
@@ -158,14 +162,14 @@ function renderSubscription() {
         <p class="plan-card-meta">
           Status: <strong>${billingStatus?.status || '—'}</strong>
           ${premium ? ` · Period ends ${end}` : ''}
-          ${billingStatus?.cancel_at_period_end ? ' · Will cancel at period end' : ''}
+          ${cancelAtEnd ? ' · Will cancel at period end' : ''}
         </p>
         <div class="account-actions">
-          <button type="button" class="btn btn-primary" data-action="checkout">
+          ${showCheckout ? `<button type="button" class="btn btn-primary" data-action="checkout">
             ${premium ? 'Renew with Bitcoin' : 'Upgrade with Bitcoin — $5/mo'}
-          </button>
+          </button>` : ''}
           ${
-            premium && !billingStatus?.cancel_at_period_end
+            premium && !cancelAtEnd
               ? `<button type="button" class="btn btn-outline" data-action="cancel">Cancel at period end</button>`
               : ''
           }
