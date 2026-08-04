@@ -137,7 +137,7 @@ func (s *BillingService) CreatePremiumCheckout(ctx context.Context, accountID, p
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return "", err
 	}
-	if err == nil && existing.Tier == model.TierPremium && existing.Status == model.StatusActive && time.Now().UTC().Before(existing.CurrentPeriodEnd) {
+	if err == nil && existing.Tier == model.TierPremium && existing.Status == model.StatusActive && time.Now().UTC().Before(existing.CurrentPeriodEnd) && !existing.CancelAtPeriodEnd {
 		return "", fmt.Errorf("already subscribed to premium until %s", existing.CurrentPeriodEnd.Format(time.RFC3339))
 	}
 
