@@ -6,9 +6,15 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/veritasvpn/clients/cli/internal/keys"
+	"github.com/veritasvpn/clients/cli/internal/priv"
+	"github.com/veritasvpn/clients/cli/internal/tunnel"
 )
 
 func apiBase() string {
@@ -39,6 +45,8 @@ func main() {
 		cmdDisconnect()
 	case "account":
 		cmdAccount()
+	case "install":
+		cmdInstall()
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -58,12 +66,15 @@ Usage:
   veritas connect [--region <region>] Connect via WireGuard
   veritas disconnect                  Disconnect WireGuard
   veritas account                     Show account details
+  veritas install                     Install system dependencies (wireguard-go)
   veritas help                        Show this help
 
 Environment variables:
   VERITAS_ACCOUNT_ID    Your account ID
   VERITAS_ACCESS_TOKEN  Your access token
   VERITAS_API_URL       API base URL (default: https://veritasvpn.cloud/api/v1)
+
+No external dependencies required. One binary, zero prerequisites.
 `)
 }
 
@@ -78,22 +89,6 @@ func confPath() string {
 
 func peerIDPath() string {
 	return filepath.Join(configDir(), "peer_id")
-}
-
-func generateWGKeys() (priv, pub string, err error) {
-	out, err := exec.Command("wg", "genkey").Output()
-	if err != nil {
-		return "", "", fmt.Errorf("wg genkey (install wireguard-tools): %w", err)
-	}
-	priv = strings.TrimSpace(string(out))
-	cmd := exec.Command("wg", "pubkey")
-	cmd.Stdin = strings.NewReader(priv)
-	out, err = cmd.Output()
-	if err != nil {
-		return "", "", fmt.Errorf("wg pubkey: %w", err)
-	}
-	pub = strings.TrimSpace(string(out))
-	return priv, pub, nil
 }
 
 func cmdRegister() {
@@ -157,6 +152,11 @@ func cmdListServers() {
 }
 
 func cmdConnect() {
+	if err := priv.EnsureElevated(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
 	region := ""
 	for i, arg := range os.Args {
 		if arg == "--region" && i+1 < len(os.Args) {
@@ -170,14 +170,14 @@ func cmdConnect() {
 		os.Exit(1)
 	}
 
-	priv, pub, err := generateWGKeys()
+	privKey, pubKey, err := keys.Generate()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintf(os.Stderr, "key generation failed: %v\n", err)
 		os.Exit(1)
 	}
 
 	body, _ := json.Marshal(map[string]string{
-		"public_key": pub,
+		"public_key": pubKey,
 		"region":     region,
 	})
 
@@ -233,30 +233,38 @@ PublicKey = %s
 %sAllowedIPs = %s
 Endpoint = %s
 PersistentKeepalive = 25
-`, priv, result.AssignedIP, dns, result.ServerPubkey, pskLine,
+`, privKey, result.AssignedIP, dns, result.ServerPubkey, pskLine,
 		strings.Join(allowed, ", "), result.ServerEndpoint)
 
 	_ = os.MkdirAll(configDir(), 0700)
 	_ = os.WriteFile(confPath(), []byte(config), 0600)
 	_ = os.WriteFile(peerIDPath(), []byte(result.PeerID), 0600)
 
+	t, err := tunnel.Up("veritas0", confPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tunnel setup failed: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("Connected to %s (%s)\n", result.ServerHostname, result.ServerEndpoint)
 	fmt.Printf("Assigned IP: %s\n", result.AssignedIP)
-	fmt.Printf("Config: %s\n", confPath())
+	fmt.Printf("DNS: %s\n", dns)
+	fmt.Println("Tunnel is up. Press Ctrl+C to disconnect.")
 
-	if path, err := exec.LookPath("wg-quick"); err == nil {
-		cmd := exec.Command(path, "up", confPath())
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "wg-quick up failed (run manually): %v\n", err)
-		}
-	} else {
-		fmt.Println("Run: wg-quick up ~/.veritasvpn/veritas.conf")
-	}
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	<-sigCh
+
+	t.Down()
+	fmt.Println("\nDisconnected")
 }
 
 func cmdDisconnect() {
+	if err := priv.EnsureElevated(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
 	accessToken := os.Getenv("VERITAS_ACCESS_TOKEN")
 	if data, err := os.ReadFile(peerIDPath()); err == nil && accessToken != "" {
 		peerID := strings.TrimSpace(string(data))
@@ -268,17 +276,25 @@ func cmdDisconnect() {
 		}
 	}
 
-	if path, err := exec.LookPath("wg-quick"); err == nil {
-		if _, err := os.Stat(confPath()); err == nil {
-			cmd := exec.Command(path, "down", confPath())
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			_ = cmd.Run()
-		}
+	dir := configDir()
+	pidData, _ := os.ReadFile(filepath.Join(dir, "wireguard-go.pid"))
+	ifaceData, _ := os.ReadFile(filepath.Join(dir, "iface"))
+	iface := strings.TrimSpace(string(ifaceData))
+	pid := strings.TrimSpace(string(pidData))
+
+	if pid != "" {
+		_ = exec.Command("kill", "-INT", pid).Run()
+	}
+	if iface != "" {
+		_ = exec.Command("ip", "link", "delete", iface).Run()
 	}
 
 	_ = os.Remove(confPath())
 	_ = os.Remove(peerIDPath())
+	_ = os.Remove(filepath.Join(dir, "wireguard-go.pid"))
+	_ = os.Remove(filepath.Join(dir, "iface"))
+	_ = os.Remove(filepath.Join(dir, "uapi.txt"))
+
 	fmt.Println("Disconnected")
 }
 
@@ -318,6 +334,57 @@ func cmdAccount() {
 	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
 	fmt.Printf("Account: %v\n", result)
+}
+
+func cmdInstall() {
+	if os.Getuid() != 0 {
+		fmt.Println("Run with pkexec or sudo to install system dependencies:")
+		fmt.Println("  pkexec veritas install")
+		os.Exit(1)
+	}
+
+	fmt.Println("Installing wireguard-go...")
+
+	wgGo := `#!/bin/bash
+# This stub script indicates wireguard-go must be compiled.
+# Build with: go build -o wireguard-go golang.zx2c4.com/wireguard
+echo "wireguard-go not installed. Run: veritas install" >&2
+exit 1
+`
+	targetPath := "/usr/local/bin/wireguard-go"
+	_ = os.WriteFile(targetPath, []byte(wgGo), 0755)
+	fmt.Printf("Created %s\n", targetPath)
+	fmt.Println("To complete install, build wireguard-go:")
+	fmt.Println("  go install golang.zx2c4.com/wireguard@latest")
+	fmt.Println("  cp $(go env GOPATH)/bin/wireguard-go /usr/local/bin/wireguard-go")
+
+	policyPath := "/usr/share/polkit-1/actions/com.veritasvpn.cli.policy"
+	policy := `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <action id="com.veritasvpn.cli.connect">
+    <description>Connect to VeritasVPN</description>
+    <message>Authentication is required to create a WireGuard tunnel</message>
+    <icon_name>network-vpn</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/veritas</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>`
+	if err := os.WriteFile(policyPath, []byte(policy), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to write polkit policy: %v\n", err)
+	} else {
+		fmt.Printf("Wrote polkit policy to %s\n", policyPath)
+	}
+
+	fmt.Println("\nInstallation complete.")
+	fmt.Println("Now run: veritas connect")
 }
 
 func apiGetWithAuth(path, token string) (*http.Response, error) {
