@@ -63,6 +63,9 @@ if command -v iptables >/dev/null; then
     || iptables -A FORWARD -i "$WG_IFACE" -j ACCEPT
   iptables -C FORWARD -o "$WG_IFACE" -j ACCEPT 2>/dev/null \
     || iptables -A FORWARD -o "$WG_IFACE" -j ACCEPT
+
+  iptables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null \
+    || iptables -I FORWARD 1 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 fi
 
 echo "[bootstrap] ready"

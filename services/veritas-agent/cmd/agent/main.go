@@ -489,7 +489,11 @@ func ensureForwardAccept(wgIface string) error {
 	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-i", wgIface, "-j", "ACCEPT").Run(); err != nil {
 		return err
 	}
-	return exec.Command("iptables", "-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT").Run()
+	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT").Run(); err != nil {
+		return err
+	}
+	_ = exec.Command("iptables", "-D", "FORWARD", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu").Run()
+	return exec.Command("iptables", "-I", "FORWARD", "1", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu").Run()
 }
 
 func (a *Agent) registerWithManager(ctx context.Context) (*RegisterServerResponse, error) {
@@ -597,7 +601,7 @@ func (a *Agent) streamLoop(ctx context.Context) {
 func (a *Agent) handlePeerUpdate(update *PeerUpdate) {
 	switch update.Action {
 	case "ADD":
-		if err := a.peerManager.AddPeer(update.PeerID, update.PublicKey, update.PresharedKey, update.AllowedIPs); err != nil {
+		if err := a.peerManager.AddPeer(update.PeerID, update.PublicKey, update.PresharedKey, []string{"0.0.0.0/0"}); err != nil {
 			a.logger.Error("Failed to add peer",
 				zap.String("peer_id", update.PeerID), zap.Error(err))
 			return

@@ -75,30 +75,46 @@ func (m *Manager) SyncPeers(desired []PeerConfig) error {
 		want[desired[i].PublicKey] = &desired[i]
 	}
 
-	for pubkey := range m.peers {
+	// The in-memory map is only a cache and is empty after an agent restart.
+	// Reconcile against the kernel device so stale peers cannot survive a
+	// process/container restart indefinitely.
+	kernelPeers, err := m.wg.ListPeers()
+	if err != nil {
+		return fmt.Errorf("list kernel peers: %w", err)
+	}
+
+	existing := make(map[string]struct{}, len(kernelPeers))
+	for _, peer := range kernelPeers {
+		existing[peer.PublicKey] = struct{}{}
+	}
+
+	for pubkey := range existing {
 		if _, ok := want[pubkey]; !ok {
 			if err := m.wg.RemovePeer(pubkey); err != nil {
 				return fmt.Errorf("sync remove %s: %w", pubkey, err)
 			}
-			delete(m.peers, pubkey)
 		}
 	}
 
 	for pubkey, cfg := range want {
-		if _, ok := m.peers[pubkey]; !ok {
-			ipNets := cidrsToIPNets(cfg.AllowedIPs)
+		ipNets := cidrsToIPNets(cfg.AllowedIPs)
+		if len(ipNets) == 0 {
+			return fmt.Errorf("sync peer %s has no valid allowed IPs", pubkey)
+		}
 
-			var pskPtr *string
-			if cfg.PresharedKey != "" {
-				pskPtr = &cfg.PresharedKey
-			}
+		var pskPtr *string
+		if cfg.PresharedKey != "" {
+			pskPtr = &cfg.PresharedKey
+		}
 
-			if err := m.wg.AddPeer(pubkey, ipNets, pskPtr); err != nil {
-				return fmt.Errorf("sync add %s: %w", pubkey, err)
-			}
-			m.peers[pubkey] = cfg
+		// AddPeer uses ReplaceAllowedIPs, so applying every desired peer also
+		// repairs malformed or outdated kernel configuration.
+		if err := m.wg.AddPeer(pubkey, ipNets, pskPtr); err != nil {
+			return fmt.Errorf("sync apply %s: %w", pubkey, err)
 		}
 	}
+
+	m.peers = want
 
 	return nil
 }

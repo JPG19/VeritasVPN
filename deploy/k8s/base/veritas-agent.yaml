@@ -116,5 +116,5 @@ spec:
       volumes:
         - name: wireguard
           hostPath:
-            path: /home/juan-pablo-garcia/VeritasVPN/data/wireguard
+            path: /home/jpg/VeritasVPN/data/wireguard
             type: Directory

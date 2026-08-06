@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Download the VeritasVPN Apple Silicon test build for macOS.">
     <title>Download VeritasVPN for macOS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,34 +45,23 @@
         <section class="downloads-hero">
             <div class="container">
                 <h1>VeritasVPN for macOS</h1>
-                <p>Native Tauri desktop app — WireGuard VPN (SOCKS only as fallback). Apple silicon.</p>
+                <p>A WireGuard-only Apple Silicon build connected to the VeritasVPN node in Paraguay.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
-                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-macos.dmg" download>Download for Mac</a>
-                    <a class="btn btn-outline btn-lg" href="/install/chrome.html">Use Chrome meanwhile</a>
+                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-macos-906b23ae.dmg" download>Download for Apple Silicon</a>
+                    <a class="btn btn-outline btn-lg" href="/downloads.html">View available platforms</a>
                 </div>
             </div>
         </section>
 
         <section class="downloads">
             <div class="container install-steps">
-                <h2>Install in 3 steps</h2>
-                <ol class="install-list">
-                    <li>
-                        <strong>Download the .dmg</strong>
-                        <p>Click the button above — Apple silicon (M-series) for now.</p>
-                    </li>
-                    <li>
-                        <strong>Install</strong>
-                        <p>Open the .dmg, drag VeritasVPN to your Applications folder.</p>
-                    </li>
-                    <li>
-                        <strong>Clear Gatekeeper quarantine (required until notarized)</strong>
-                        <p>macOS may say the app is “damaged” and tell you to move it to the Trash. That is a quarantine warning on an unsigned build — the file is fine. In Terminal run:</p>
-                        <pre style="text-align:left;background:rgba(0,0,0,.35);padding:12px 16px;border-radius:8px;overflow:auto;font-size:13px;margin-top:10px;"><code>xattr -cr /Applications/VeritasVPN.app</code></pre>
-                        <p style="margin-top:10px;">Then open VeritasVPN from Applications, sign in, and hit Connect.</p>
-                    </li>
+                <h2>Install the test build</h2>
+                <ol>
+                    <li>Download and open the DMG, then drag VeritasVPN into Applications.</li>
+                    <li>Open VeritasVPN, register or sign in, and press Connect.</li>
+                    <li>Approve the macOS administrator prompt so the app can configure the WireGuard tunnel.</li>
                 </ol>
-                <p class="downloads-note">Apple notarization / Developer ID signing is not set up yet. Until then, the <code>xattr</code> step above is required after every download. Intel Mac build on the way.</p>
+                <p class="downloads-note"><strong>Compatibility:</strong> macOS 12 or newer on Apple Silicon. This test build uses an ad-hoc integrity signature and is not yet Apple-notarized.</p>
             </div>
         </section>
     </main>

@@ -176,5 +176,5 @@ spec:
             name: nginx-config
         - name: website
           hostPath:
-            path: /home/juan-pablo-garcia/VeritasVPN/website
+            path: /home/jpg/VeritasVPN/website
             type: Directory

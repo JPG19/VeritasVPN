@@ -41,6 +41,9 @@ CREATE INDEX IF NOT EXISTS idx_peers_account ON peers(account_id);
 CREATE INDEX IF NOT EXISTS idx_peers_server ON peers(server_id);
 CREATE INDEX IF NOT EXISTS idx_peers_pubkey ON peers(pubkey);
 CREATE INDEX IF NOT EXISTS idx_peers_status ON peers(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_peers_active_server_ip
+    ON peers(server_id, assigned_ip)
+    WHERE status IN ('pending', 'active');
 
 CREATE TABLE IF NOT EXISTS server_metrics (
     id         BIGSERIAL PRIMARY KEY,

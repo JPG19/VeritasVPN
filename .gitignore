@@ -70,8 +70,18 @@ logs/
 # Cloudflared
 cloudflared
 .cloudflared/
+dist-site/
 
 # BTCPay secrets
 btcpay/.env
 containers/proxy-gateway/data/
 website/downloads/veritasvpn-linux.*
+
+# Local/generated media tooling
+.video-tools/
+video/
+__pycache__/
+*.pyc
+
+# Keep only explicitly published macOS DMG builds in git.
+website/downloads/veritasvpn-macos-*.dmg

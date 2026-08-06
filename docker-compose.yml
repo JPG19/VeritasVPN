@@ -7,8 +7,6 @@ services:
       POSTGRES_DB: veritas
       POSTGRES_USER: veritas
       POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me-set-in-env-file}
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./services/auth-svc/migrations:/docker-entrypoint-initdb.d/auth:ro
@@ -21,8 +19,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     command: redis-server --appendonly no --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -30,25 +26,20 @@ services:
 
   nats:
     image: nats:2.10-alpine
-    ports:
-      - "4222:4222"
-      - "8222:8222"
     command: -js -m 8222
 
   auth-svc:
     build:
       context: .
       dockerfile: services/auth-svc/Dockerfile
-    ports:
-      - "8081:8080"
     environment:
       DATABASE_URL: postgres://veritas:${DB_PASSWORD:-change-me}@postgres:5432/veritas?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       NATS_URL: nats://nats:4222
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
-      LOG_LEVEL: debug
+      LOG_LEVEL: info
       LOG_FORMAT: console
-      ENVIRONMENT: development
+      ENVIRONMENT: production
       CORS_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
     depends_on:
       postgres:
@@ -63,16 +54,17 @@ services:
       context: .
       dockerfile: services/wg-manager/Dockerfile
     ports:
-      - "8082:8080"
+      # The host-network WireGuard agent is the only host-side caller.
+      - "127.0.0.1:8082:8080"
     environment:
       DATABASE_URL: postgres://veritas:${DB_PASSWORD:-change-me}@postgres:5432/veritas?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       NATS_URL: nats://nats:4222
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN:?AGENT_AUTH_TOKEN must be set in .env}
-      LOG_LEVEL: debug
+      LOG_LEVEL: info
       LOG_FORMAT: console
-      ENVIRONMENT: development
+      ENVIRONMENT: production
       FREE_ALLOWED_REGIONS: ${FREE_ALLOWED_REGIONS:-}
     depends_on:
       postgres:
@@ -102,7 +94,7 @@ services:
       SERVER_REGION: ${SERVER_REGION:-sa}
       SERVER_CITY: ${SERVER_CITY:-local}
       SERVER_COUNTRY: ${SERVER_COUNTRY:-AR}
-      LOG_LEVEL: debug
+      LOG_LEVEL: info
     volumes:
       - ./data/wireguard:/etc/wireguard
     depends_on:
@@ -113,8 +105,6 @@ services:
     build:
       context: .
       dockerfile: services/billing-svc/Dockerfile
-    ports:
-      - "8083:8080"
     networks:
       - default
       - btcpay_default
@@ -136,8 +126,10 @@ services:
       BILLING_PUBLIC_URL: ${BILLING_PUBLIC_URL:-http://localhost:8083}
       # Opt-in only. Public hosts must leave this false/unset.
       ALLOW_MOCK_BTCPAY: ${ALLOW_MOCK_BTCPAY:-false}
-      LOG_LEVEL: debug
+      LOG_LEVEL: info
       LOG_FORMAT: console
+      # Keep billing in test mode until real BTCPay credentials are provisioned.
+      # Mock checkout remains disabled by ALLOW_MOCK_BTCPAY=false.
       ENVIRONMENT: development
     depends_on:
       postgres:
@@ -146,6 +138,10 @@ services:
         condition: service_started
 
   veritas-proxy:
+    # Legacy SOCKS transport is intentionally disabled in normal production.
+    # VeritasVPN clients must use WireGuard; enable this profile only for an
+    # explicit migration/debug session.
+    profiles: ["legacy-browser-proxy"]
     build:
       context: ./containers/proxy-gateway
       dockerfile: Dockerfile
@@ -181,7 +177,7 @@ services:
   # Enable with: docker compose --profile tunnel-fallback up -d cloudflared
   cloudflared:
     profiles: ["tunnel-fallback"]
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.7.3
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     restart: unless-stopped
     depends_on:

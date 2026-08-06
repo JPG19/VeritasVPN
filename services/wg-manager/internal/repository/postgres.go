@@ -114,6 +114,20 @@ func (p *Postgres) UpdateServerLoad(ctx context.Context, id string, peerCount in
 	return err
 }
 
+func (p *Postgres) IsActiveIPAssigned(ctx context.Context, serverID, assignedIP string) (bool, error) {
+	var assigned bool
+	err := p.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM peers
+			WHERE server_id = $1 AND assigned_ip = $2
+			  AND status IN ('pending', 'active')
+		)`, serverID, assignedIP).Scan(&assigned)
+	if err != nil {
+		return false, fmt.Errorf("check assigned ip: %w", err)
+	}
+	return assigned, nil
+}
+
 func (p *Postgres) CreatePeer(ctx context.Context, peer *model.Peer) error {
 	query := `INSERT INTO peers (account_id, server_id, pubkey, preshared_key,
 	           allowed_ips, assigned_ip, status, expires_at)

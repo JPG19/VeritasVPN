@@ -11,13 +11,13 @@ import {
   signOut as doSignOut,
   type User,
 } from "./auth";
-import { AUTH_API, DEFAULT_PROXY } from "./config";
+import { AUTH_API } from "./config";
 import "./App.css";
 
 type AuthMode = "signin" | "signup";
 /** Email/password vs Account ID (anonymous) path. */
 type AuthMethod = "email" | "accountId";
-type TunnelMode = "wireguard" | "socks" | "";
+type TunnelMode = "wireguard" | "";
 
 interface ConnectResult {
   success: boolean;
@@ -41,6 +41,64 @@ interface PeerResponse {
   allowed_ips?: string[];
   client_allowed_ips?: string[];
   error?: string;
+}
+
+function ConnectionMap({ connected }: { connected: boolean }) {
+  return (
+    <section className={`connection-map ${connected ? "is-connected" : ""}`} aria-label="VPN route from your device to Paraguay">
+      <div className="map-topline">
+        <span>LIVE ROUTE</span>
+        <span className="map-latency">{connected ? "Encrypted" : "Ready"}</span>
+      </div>
+      <svg viewBox="0 0 900 430" role="img" aria-label="World map with a route to the VeritasVPN node in Paraguay">
+        <defs>
+          <linearGradient id="routeGradient" x1="0" x2="1">
+            <stop offset="0" stopColor="#7048ff" />
+            <stop offset="1" stopColor="#28d9c3" />
+          </linearGradient>
+          <filter id="routeGlow">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+        <g className="map-grid">
+          <path d="M0 108H900M0 215H900M0 322H900M225 0V430M450 0V430M675 0V430" />
+        </g>
+        <g className="continents">
+          <path d="M77 99l50-46 92-13 68 26 37 47-20 43-54 9-22 37-37 11-19 43-35-16-12-61-46-31z" />
+          <path d="M248 221l45 27 27 58-17 78-37 37-22-53 8-56-32-53z" />
+          <path d="M421 87l47-36 74 6 37 24 72-14 95 29 74 53-24 37-65 3-38 38-42-16-42 22-27-33-55 8-39-38-54-21z" />
+          <path d="M487 211l64 8 48 43-16 77-46 53-42-39-17-78z" />
+          <path d="M735 311l51-31 66 25 20 52-57 31-65-22z" />
+          <path d="M390 405l133-10 116 16-37 19H432z" />
+        </g>
+        <path className="route-shadow" d="M128 125C255 88 339 164 421 239S535 315 599 319" />
+        <path className="route-line" d="M128 125C255 88 339 164 421 239S535 315 599 319" />
+        <circle className="route-particle particle-one" r="4">
+          <animateMotion dur="2.8s" repeatCount="indefinite" path="M128 125C255 88 339 164 421 239S535 315 599 319" />
+        </circle>
+        <circle className="route-particle particle-two" r="3">
+          <animateMotion begin="1.2s" dur="2.8s" repeatCount="indefinite" path="M128 125C255 88 339 164 421 239S535 315 599 319" />
+        </circle>
+        <g className="map-origin" transform="translate(128 125)">
+          <circle r="5" />
+          <circle className="map-pulse" r="12" />
+        </g>
+        <g className="map-destination" transform="translate(599 319)">
+          <circle className="map-pulse" r="18" />
+          <circle r="8" />
+        </g>
+      </svg>
+      <div className="route-label route-label-origin">
+        <span>Your device</span>
+        <strong>Protected locally</strong>
+      </div>
+      <div className="route-label route-label-destination">
+        <span>PARAGUAY</span>
+        <strong>Asunción metro</strong>
+      </div>
+    </section>
+  );
 }
 
 function App() {
@@ -109,22 +167,6 @@ function App() {
     [email, password, accountId, mode, method]
   );
 
-  const connectSocksFallback = useCallback(async (reason: string) => {
-    const result = await invoke<ConnectResult>("connect_socks", {
-      config: {
-        host: DEFAULT_PROXY.host,
-        port: DEFAULT_PROXY.port,
-      },
-    });
-    if (result.success) {
-      setConnected(true);
-      setTunnelMode("socks");
-      setStatusMsg(`${reason} Using browser-style SOCKS fallback.`);
-    } else {
-      setStatusMsg(result.message || reason);
-    }
-  }, []);
-
   const handleConnect = useCallback(async () => {
     setStatusMsg("");
     await refreshSession();
@@ -137,8 +179,9 @@ function App() {
     try {
       const available = await invoke<boolean>("wireguard_available");
       if (!available) {
-        await connectSocksFallback("VPN engine missing from app bundle.");
-        return;
+        throw new Error(
+          "WireGuard is unavailable in this build. No proxy fallback was activated."
+        );
       }
 
       const keys = await invoke<KeyPair>("generate_wg_keys");
@@ -192,7 +235,7 @@ function App() {
         err instanceof Error ? err.message : "Connection failed"
       );
     }
-  }, [connectSocksFallback]);
+  }, []);
 
   const handleDisconnect = useCallback(async () => {
     setStatusMsg("Disconnecting…");
@@ -221,10 +264,6 @@ function App() {
           );
           return;
         }
-      }
-      if (tunnelMode === "socks") {
-        await invoke<ConnectResult>("disconnect_socks");
-        clearUi();
       }
       clearUi();
       setStatusMsg("Disconnected");
@@ -365,40 +404,55 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <div className="brand">
-        <h1>Veritas<span>VPN</span></h1>
-        <p className="user-email">
-          {user.email || user.account_id}
-        </p>
-        {user.email && user.account_id && (
-          <p className="user-account-id">ID: {user.account_id}</p>
-        )}
-      </div>
-      <div className="status-badge">
-        <span className={`dot ${connected ? "on" : "off"}`} />
-        {connected
-          ? tunnelMode === "wireguard"
-            ? "Connected — WireGuard tunnel"
-            : "Connected — SOCKS fallback"
-          : "Disconnected"}
-      </div>
-      {statusMsg && <div className="status-msg">{statusMsg}</div>}
-      {!connected ? (
-        <button className="btn-connect" onClick={handleConnect}>
-          Connect
-        </button>
-      ) : (
-        <button className="btn-disconnect" onClick={handleDisconnect}>
-          Disconnect
-        </button>
-      )}
-      <button className="btn-signout" onClick={handleSignOut}>
-        Sign out
-      </button>
-      <p className="footer-note">
-        One-click WireGuard VPN — no extra software to install
-      </p>
+    <div className="app app-dashboard">
+      <header className="app-header">
+        <div className="brand brand-inline">
+          <span className="brand-mark">V</span>
+          <div><h1>Veritas<span>VPN</span></h1><p>Privacy is truth.</p></div>
+        </div>
+        <div className="account-menu">
+          <span className="account-avatar">{(user.email || user.account_id || "V").slice(0, 1).toUpperCase()}</span>
+          <div>
+            <strong>{user.email || "Anonymous account"}</strong>
+            <span>Veritas account</span>
+          </div>
+          <button className="btn-signout" onClick={handleSignOut}>Sign out</button>
+        </div>
+      </header>
+
+      <main className="dashboard-main">
+        <ConnectionMap connected={connected} />
+        <aside className="connection-panel">
+          <div className={`status-orb ${connected ? "is-on" : ""}`}>
+            <span className="orb-ring" />
+            <span className="orb-lock">{connected ? "✓" : "V"}</span>
+          </div>
+          <p className="eyebrow">{connected ? "CONNECTION SECURED" : "VPN READY"}</p>
+          <h2>{connected ? "You’re protected" : "Connect to Veritas"}</h2>
+          <p className="connection-copy">
+            {connected
+              ? tunnelMode === "wireguard"
+                ? "Your internet traffic is encrypted through our WireGuard node in Paraguay."
+                : "Your browser traffic is protected through our encrypted proxy in Paraguay."
+              : "Route your traffic privately through our live node in Paraguay."}
+          </p>
+          <div className="server-card">
+            <span className="flag">🇵🇾</span>
+            <div><strong>Paraguay</strong><span>Asunción metro · Automatic</span></div>
+            <span className="server-live">LIVE</span>
+          </div>
+          {!connected ? (
+            <button className="btn-connect" onClick={handleConnect}><span>Connect now</span><i>→</i></button>
+          ) : (
+            <button className="btn-disconnect" onClick={handleDisconnect}>Disconnect</button>
+          )}
+          <div className="connection-meta">
+            <span><i className={`dot ${connected ? "on" : "off"}`} />{connected ? "Protected" : "Not connected"}</span>
+            <span>{tunnelMode === "wireguard" ? "WireGuard" : "WireGuard only"}</span>
+          </div>
+          {statusMsg && <div className="status-msg">{statusMsg}</div>}
+        </aside>
+      </main>
     </div>
   );
 }
