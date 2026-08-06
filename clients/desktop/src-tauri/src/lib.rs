@@ -162,7 +162,29 @@ fn disconnect_wireguard(app: AppHandle) -> ConnectResult {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String, String> {
+    bring_up_wireguard_impl(app, config, build_bringup_script_macos)
+}
+
+#[cfg(target_os = "linux")]
+fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String, String> {
+    bring_up_wireguard_impl(app, config, build_bringup_script_linux)
+}
+
+fn bring_up_wireguard_impl(
+    app: &AppHandle,
+    config: &WgTunnelConfig,
+    build_script: fn(
+        wg_go: &Path,
+        uapi_path: &Path,
+        iface_file: &Path,
+        pid_file: &Path,
+        address: &str,
+        dns: &str,
+        endpoint: &str,
+    ) -> String,
+) -> Result<String, String> {
     let wg_go = resolve_wireguard_go(app)?;
     let dir = state_dir()?;
     let address = config
@@ -214,7 +236,7 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
     .ok();
     fs::write(peer_id_path()?, config.peer_id.as_bytes()).ok();
 
-    let script = build_bringup_script(
+    let script = build_script(
         &wg_go,
         &uapi_path,
         &iface_file,
@@ -243,7 +265,8 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
     Ok(format!("WireGuard connected via {endpoint}"))
 }
 
-fn build_bringup_script(
+#[cfg(target_os = "macos")]
+fn build_bringup_script_macos(
     wg_go: &Path,
     uapi_path: &Path,
     iface_file: &Path,
@@ -465,7 +488,183 @@ echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
     )
 }
 
+#[cfg(target_os = "linux")]
+fn build_bringup_script_linux(
+    wg_go: &Path,
+    uapi_path: &Path,
+    iface_file: &Path,
+    pid_file: &Path,
+    address: &str,
+    dns: &str,
+    endpoint: &str,
+) -> String {
+    format!(
+        r#"#!/bin/bash
+set -uo pipefail
+WG_GO='{wg_go}'
+UAPI='{uapi}'
+IFACE_FILE='{iface_file}'
+PID_FILE='{pid_file}'
+META_FILE='{iface_file}.meta'
+DNS_BACKUP="${{META_FILE}}.dns"
+ADDR='{address}'
+DNS='{dns}'
+ENDPOINT='{endpoint}'
+IFACE_NAME="veritas0"
+trap 'rm -f "$UAPI"' EXIT
+
+# --- tear down any previous Veritas tunnel (best-effort) ---
+if [[ -f "$PID_FILE" ]]; then
+  kill "$(cat "$PID_FILE")" 2>/dev/null || true
+  rm -f "$PID_FILE"
+fi
+if [[ -f "$IFACE_FILE" ]]; then
+  OLD="$(cat "$IFACE_FILE")"
+  ip route del 0.0.0.0/1 dev "$OLD" 2>/dev/null || true
+  ip route del 128.0.0.0/1 dev "$OLD" 2>/dev/null || true
+  ip link set "$OLD" down 2>/dev/null || true
+  rm -f "$IFACE_FILE"
+fi
+ip route del 0.0.0.0/1 2>/dev/null || true
+ip route del 128.0.0.0/1 2>/dev/null || true
+pkill -f 'wireguard-go veritas0' 2>/dev/null || true
+rm -f /var/run/wireguard/*.sock 2>/dev/null || true
+
+# Find the default gateway before adding tunnel routes
+GW="$(ip route show default | awk '/default via/ {{print $3; exit}}')"
+GW_IF="$(ip route show default | awk '/dev/ {{print $5; exit}}')"
+ENDPOINT_HOST="${{ENDPOINT%%:*}}"
+ENDPOINT_IP=""
+if [[ -n "$ENDPOINT_HOST" ]]; then
+  if [[ "$ENDPOINT_HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    ENDPOINT_IP="$ENDPOINT_HOST"
+  else
+    ENDPOINT_IP="$(dig +short "$ENDPOINT_HOST" 2>/dev/null | head -1 || true)"
+    if [[ -z "$ENDPOINT_IP" ]]; then
+      ENDPOINT_IP="$(getent hosts "$ENDPOINT_HOST" 2>/dev/null | awk '{{print $1; exit}}' || true)"
+    fi
+  fi
+fi
+
+# Start userspace WireGuard
+"$WG_GO" "$IFACE_NAME" >/tmp/veritas-wg-go.log 2>&1 &
+echo $! > "$PID_FILE"
+sleep 0.5
+
+# Wait for socket
+for _ in $(seq 1 40); do
+  for sock in /var/run/wireguard/*.sock; do
+    [[ -e "$sock" ]] || continue
+    IFACE="$(basename "$sock" .sock)"
+    break 2
+  done
+  sleep 0.1
+done
+if [[ -z "$IFACE" ]]; then
+  echo "failed to start WireGuard engine" >&2
+  cat /tmp/veritas-wg-go.log >&2 || true
+  exit 1
+fi
+echo "$IFACE_NAME" > "$IFACE_FILE"
+
+# Configure WireGuard via UAPI
+python3 - "$IFACE" "$UAPI" <<'PY'
+import socket, sys, pathlib
+iface, uapi = sys.argv[1], sys.argv[2]
+sock_path = f"/var/run/wireguard/{{iface}}.sock"
+data = pathlib.Path(uapi).read_bytes()
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(sock_path)
+s.sendall(data)
+s.shutdown(socket.SHUT_WR)
+resp = s.recv(4096).decode("utf-8", "replace")
+s.close()
+if "errno=0" not in resp:
+    sys.stderr.write(resp + "\n")
+    sys.exit(1)
+PY
+
+ip addr add "$ADDR" dev "$IFACE_NAME"
+ip link set "$IFACE_NAME" up
+ip link set "$IFACE_NAME" mtu 1420
+
+# Prove WireGuard handshake before changing system routes
+ip route add 10.0.0.0/24 dev "$IFACE_NAME" 2>/dev/null
+if ! ping -c 3 -W 1 10.0.0.1 >/tmp/veritas-wg-handshake.log 2>&1; then
+  ip route del 10.0.0.0/24 dev "$IFACE_NAME" 2>/dev/null || true
+  ip link set "$IFACE_NAME" down 2>/dev/null || true
+  kill "$(cat "$PID_FILE")" 2>/dev/null || true
+  rm -f "$PID_FILE" "$IFACE_FILE" "$META_FILE" /var/run/wireguard/*.sock
+  echo "WireGuard handshake with the VPN server failed; normal internet was left unchanged" >&2
+  exit 1
+fi
+
+# Host route so VPN endpoint stays reachable outside the tunnel
+if [[ -n "$ENDPOINT_IP" && -n "$GW" ]]; then
+  ip route del "$ENDPOINT_IP" 2>/dev/null || true
+  ip route add "$ENDPOINT_IP" via "$GW" 2>/dev/null || true
+fi
+
+# Split default via the tunnel
+ip route del 0.0.0.0/1 dev "$IFACE_NAME" 2>/dev/null || true
+ip route del 128.0.0.0/1 dev "$IFACE_NAME" 2>/dev/null || true
+ip route add 0.0.0.0/1 dev "$IFACE_NAME"
+ip route add 128.0.0.0/1 dev "$IFACE_NAME"
+
+# DNS: backup resolv.conf and set new DNS
+cp /etc/resolv.conf "$DNS_BACKUP" 2>/dev/null || true
+if [[ -w /etc/resolv.conf ]]; then
+  echo "nameserver $DNS" > /etc/resolv.conf
+elif command -v resolvectl >/dev/null 2>&1; then
+  resolvectl dns "$GW_IF" "$DNS" 2>/dev/null || true
+fi
+
+# Persist state for teardown
+printf 'endpoint_ip=%s\ngateway=%s\niface=%s\ngw_if=%s\n' \
+  "$ENDPOINT_IP" "$GW" "$IFACE_NAME" "$GW_IF" > "$META_FILE"
+
+# Verify internet connectivity through the tunnel
+if ! curl -4 -fsS --connect-timeout 5 --max-time 12 https://api.ipify.org \
+     >/tmp/veritas-wg-egress.log 2>/tmp/veritas-wg-egress-error.log; then
+  ip route del 0.0.0.0/1 dev "$IFACE_NAME" 2>/dev/null || true
+  ip route del 128.0.0.0/1 dev "$IFACE_NAME" 2>/dev/null || true
+  ip route del 10.0.0.0/24 dev "$IFACE_NAME" 2>/dev/null || true
+  [[ -n "$ENDPOINT_IP" ]] && ip route del "$ENDPOINT_IP" 2>/dev/null || true
+  if [[ -f "$DNS_BACKUP" ]]; then
+    cat "$DNS_BACKUP" > /etc/resolv.conf 2>/dev/null || true
+  fi
+  rm -f "$DNS_BACKUP"
+  ip link set "$IFACE_NAME" down 2>/dev/null || true
+  kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
+  rm -f "$PID_FILE" "$IFACE_FILE" "$META_FILE" /var/run/wireguard/*.sock
+  echo "VPN internet egress validation failed; normal internet was restored" >&2
+  exit 1
+fi
+
+echo "ok iface=$IFACE_NAME endpoint_ip=$ENDPOINT_IP gw=$GW"
+"#,
+        wg_go = wg_go.display(),
+        uapi = uapi_path.display(),
+        iface_file = iface_file.display(),
+        pid_file = pid_file.display(),
+        address = address,
+        dns = dns,
+        endpoint = endpoint,
+    )
+}
+
+#[cfg(target_os = "macos")]
 fn bring_down_wireguard(_app: &AppHandle) -> Result<String, String> {
+    bring_down_wireguard_macos(_app)
+}
+
+#[cfg(target_os = "linux")]
+fn bring_down_wireguard(app: &AppHandle) -> Result<String, String> {
+    bring_down_wireguard_linux(app)
+}
+
+#[cfg(target_os = "macos")]
+fn bring_down_wireguard_macos(_app: &AppHandle) -> Result<String, String> {
     let script_path = state_dir()?.join("teardown.sh");
     let iface_file = iface_path()?;
     let pid_file = pid_path()?;
@@ -567,9 +766,105 @@ echo ok
         let _ = Command::new("bash").arg(&script_path).output();
         let _ = fs::remove_file(conf_path()?);
         let _ = fs::remove_file(peer_id_path()?);
-        return Err(format!(
-            "disconnect needs admin rights to fully restore networking: {elev_err}"
-        ));
+        let _ = elev_err;
+        return Err(
+            "disconnect needs admin rights — run manually: sudo bash ~/.veritasvpn/teardown.sh".into()
+        );
+    }
+    let _ = fs::remove_file(conf_path()?);
+    let _ = fs::remove_file(peer_id_path()?);
+    Ok("WireGuard disconnected".into())
+}
+
+#[cfg(target_os = "linux")]
+fn bring_down_wireguard_linux(app: &AppHandle) -> Result<String, String> {
+    let wg_go = resolve_wireguard_go(app)?;
+    let _ = wg_go;
+    let script_path = state_dir()?.join("teardown.sh");
+    let iface_file = iface_path()?;
+    let pid_file = pid_path()?;
+    let meta_file = state_dir()?.join("iface.meta");
+    let script = format!(
+        r#"#!/bin/bash
+set -uo pipefail
+IFACE_FILE='{iface_file}'
+PID_FILE='{pid_file}'
+META_FILE='{meta_file}'
+DNS_BACKUP="${{META_FILE}}.dns"
+
+ENDPOINT_IP=""
+GW=""
+IFACE=""
+GW_IF=""
+
+if [[ -f "$META_FILE" ]]; then
+  source "$META_FILE" 2>/dev/null || true
+  ENDPOINT_IP="${{endpoint_ip:-}}"
+  GW="${{gateway:-}}"
+  IFACE="${{iface:-}}"
+  GW_IF="${{gw_if:-}}"
+fi
+if [[ -z "$IFACE" && -f "$IFACE_FILE" ]]; then
+  IFACE="$(cat "$IFACE_FILE")"
+fi
+
+# Remove split-tunnel routes
+if [[ -n "$IFACE" ]]; then
+  ip route del 10.0.0.0/24 dev "$IFACE" 2>/dev/null || true
+  ip route del 0.0.0.0/1 dev "$IFACE" 2>/dev/null || true
+  ip route del 128.0.0.0/1 dev "$IFACE" 2>/dev/null || true
+  ip link set "$IFACE" down 2>/dev/null || true
+fi
+ip route del 0.0.0.0/1 2>/dev/null || true
+ip route del 128.0.0.0/1 2>/dev/null || true
+
+# Remove endpoint host route
+if [[ -n "$ENDPOINT_IP" ]]; then
+  ip route del "$ENDPOINT_IP" 2>/dev/null || true
+fi
+
+# Stop userspace WireGuard
+if [[ -f "$PID_FILE" ]]; then
+  kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
+  rm -f "$PID_FILE"
+fi
+pkill -f 'wireguard-go veritas0' 2>/dev/null || true
+rm -f /var/run/wireguard/*.sock 2>/dev/null || true
+rm -f "$IFACE_FILE" "$META_FILE"
+
+# Restore DNS
+if [[ -f "$DNS_BACKUP" ]]; then
+  cat "$DNS_BACKUP" > /etc/resolv.conf 2>/dev/null || true
+fi
+if [[ -n "$GW_IF" ]] && command -v resolvectl >/dev/null 2>&1; then
+  resolvectl revert "$GW_IF" 2>/dev/null || true
+fi
+rm -f "$DNS_BACKUP"
+
+echo ok
+"#,
+        iface_file = iface_file.display(),
+        pid_file = pid_file.display(),
+        meta_file = meta_file.display(),
+    );
+    fs::write(&script_path, script).map_err(|e| format!("write teardown: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&script_path)
+            .map_err(|e| format!("stat teardown: {e}"))?
+            .permissions();
+        perms.set_mode(0o700);
+        fs::set_permissions(&script_path, perms).ok();
+    }
+    if let Err(elev_err) = run_elevated(&script_path) {
+        let _ = Command::new("bash").arg(&script_path).output();
+        let _ = fs::remove_file(conf_path()?);
+        let _ = fs::remove_file(peer_id_path()?);
+        let _ = elev_err;
+        return Err(
+            "disconnect needs admin rights — run manually: sudo bash ~/.veritasvpn/teardown.sh".into()
+        );
     }
     let _ = fs::remove_file(conf_path()?);
     let _ = fs::remove_file(peer_id_path()?);
@@ -595,7 +890,23 @@ fn run_elevated(script: &Path) -> Result<(), String> {
         }
         return Ok(());
     }
-    #[cfg(not(target_os = "macos"))]
+
+    #[cfg(target_os = "linux")]
+    {
+        let path = script.to_string_lossy().replace('"', "\\\"");
+        let output = Command::new("pkexec")
+            .arg("bash")
+            .arg(&path)
+            .output()
+            .map_err(|e| format!("pkexec: {e}"))?;
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("privilege bring-up failed: {err}"));
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let output = Command::new("bash")
             .arg(script)

@@ -260,7 +260,7 @@ function App() {
         if (!result.success) {
           setStatusMsg(
             result.message ||
-              "Disconnect incomplete — approve the admin prompt, or run: sudo bash ~/Library/Application\\ Support/cloud.veritasvpn.desktop/teardown.sh"
+              "Disconnect incomplete — approve the admin prompt, or run the teardown script from your app config directory"
           );
           return;
         }
