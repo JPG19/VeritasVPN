@@ -1,16 +1,4 @@
 name: Build VeritasVPN Desktop
-#
-# Required GitHub Secrets for macOS signing + notarization:
-#   APPLE_CERTIFICATE          — Base64-encoded .p12 Developer ID Application cert
-#   APPLE_CERTIFICATE_PASSWORD — Password for the .p12 file
-#   APPLE_SIGNING_IDENTITY     — "Developer ID Application: Your Name (TEAMID)"
-#   APPLE_TEAM_ID              — 10-char Apple Team ID
-#   APPLE_NOTARY_ISSUER        — App Store Connect API Issuer ID
-#   APPLE_NOTARY_KEY           — Base64-encoded App Store Connect API key (.p8)
-#   APPLE_NOTARY_KEY_ID        — 10-char App Store Connect API Key ID
-#
-# Without these, macOS builds will still produce an unsigned .dmg.
-# Set them at: Settings → Secrets and variables → Actions → Repository secrets
 
 on:
   push:
@@ -23,10 +11,17 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Bundle WireGuard Go (macOS)
+        run: bash scripts/bundle-wg-macos.sh
+        working-directory: clients/desktop
 
       - name: Install dependencies
         run: npm install
@@ -34,7 +29,7 @@ jobs:
 
       - name: Build .dmg
         env:
-          APPLE_SIGNING_IDENTITY: "-"
+          APPLE_SIGNING_IDENTITY: '-'
         run: npx tauri build
         working-directory: clients/desktop
 
@@ -48,6 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -57,6 +55,10 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libglib2.0-dev librsvg2-dev patchelf
+
+      - name: Bundle WireGuard Go (Linux)
+        run: bash scripts/bundle-wg-linux.sh
+        working-directory: clients/desktop
 
       - name: Install dependencies
         run: npm install

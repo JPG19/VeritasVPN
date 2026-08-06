@@ -44,10 +44,10 @@
         <section class="downloads-hero">
             <div class="container">
                 <h1>VeritasVPN for Linux</h1>
-                <p>Native Tauri desktop app — sets system-wide SOCKS5 proxy to route traffic through VeritasVPN.</p>
+                <p>A WireGuard-only native build connected to the VeritasVPN node in Paraguay.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
-                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-linux.deb" download>Download .deb</a>
-                    <a class="btn btn-outline btn-lg" href="https://github.com/JPG19/VeritasVPN/releases" target="_blank" rel="noopener">Get .AppImage from releases</a>
+                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-linux.deb" download>Download .deb (Debian/Ubuntu)</a>
+                    <a class="btn btn-outline btn-lg" href="/downloads/veritasvpn-linux.AppImage">Download .AppImage</a>
                 </div>
             </div>
         </section>
@@ -57,22 +57,19 @@
                 <h2>Install instructions</h2>
                 <ol class="install-list">
                     <li>
-                        <strong>Download</strong>
-                        <p>Pick <code>.deb</code> for Debian/Ubuntu or <code>.AppImage</code> for any Linux distro.</p>
-                    </li>
-                    <li>
                         <strong>Install (.deb)</strong>
-                        <p><code>sudo dpkg -i veritasvpn-linux.deb</code> or double-click in your file manager.</p>
+                        <p>Double-click the .deb file or run: <code>sudo dpkg -i veritasvpn-linux.deb</code></p>
                     </li>
                     <li>
                         <strong>Or run (.AppImage)</strong>
-                        <p><code>chmod +x veritasvpn-linux.AppImage &amp;&amp; ./veritasvpn-linux.AppImage</code></p>
+                        <p>Make it executable and run: <code>chmod +x veritasvpn-linux.AppImage && ./veritasvpn-linux.AppImage</code></p>
                     </li>
                     <li>
-                        <strong>Sign in &amp; Connect</strong>
-                        <p>Launch VeritasVPN, sign in with your account, and hit Connect. It sets the system SOCKS5 proxy automatically.</p>
+                        <strong>Sign in & Connect</strong>
+                        <p>Launch VeritasVPN, sign in with your account, and press Connect. Linux app requires <code>sudo</code> access to create and tear down the WireGuard tunnel.</p>
                     </li>
                 </ol>
+                <p class="downloads-note"><strong>Compatibility:</strong> Linux x86_64 (amd64) on Debian, Ubuntu, or any AppImage-compatible distribution.</p>
             </div>
         </section>
     </main>
