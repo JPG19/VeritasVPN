@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,7 +16,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -25,14 +23,11 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/veritasvpn/lib/logging"
-	"github.com/veritasvpn/services/veritas-agent/internal/dns"
 	"github.com/veritasvpn/services/veritas-agent/internal/firewall"
 	"github.com/veritasvpn/services/veritas-agent/internal/metrics"
 	"github.com/veritasvpn/services/veritas-agent/internal/peer"
 	"github.com/veritasvpn/services/veritas-agent/internal/wireguard"
 )
-
-const iptablesTimeout = 10 * time.Second
 
 type RegisterServerRequest struct {
 	Hostname  string `json:"hostname"`
@@ -91,17 +86,8 @@ func NewAgentClient(endpoint string) *httpAgentClient {
 
 func (c *httpAgentClient) streamClient() *http.Client {
 	return &http.Client{
+		// SSE streams must not use a request timeout.
 		Timeout: 0,
-		Transport: &http.Transport{
-			ResponseHeaderTimeout: 30 * time.Second,
-			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   10 * time.Second,
-			IdleConnTimeout:       90 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		},
 	}
 }
 
@@ -182,17 +168,6 @@ func (c *httpAgentClient) StreamPeerUpdates(ctx context.Context, serverID, authT
 			errCh <- err
 			return
 		}
-
-		closed := make(chan struct{})
-		defer close(closed)
-		go func() {
-			select {
-			case <-ctx.Done():
-				resp.Body.Close()
-			case <-closed:
-			}
-		}()
-
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
@@ -204,12 +179,6 @@ func (c *httpAgentClient) StreamPeerUpdates(ctx context.Context, serverID, authT
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
 			line := scanner.Text()
 			if !strings.HasPrefix(line, "data: ") {
 				continue
@@ -274,13 +243,6 @@ func urlQueryEscape(s string) string {
 	return strings.ReplaceAll(s, " ", "%20")
 }
 
-func dnsServerFromSubnet(subnet string) string {
-	if subnet == "" {
-		return "10.0.0.1:53"
-	}
-	return strings.Replace(subnet, ".0/24", ".1", 1) + ":53"
-}
-
 type AgentConfig struct {
 	AuthToken       string
 	WGInterface     string
@@ -292,7 +254,6 @@ type AgentConfig struct {
 	ServerRegion    string
 	ServerCity      string
 	ServerCountry   string
-	UpstreamDNS     string
 }
 
 func LoadAgentConfig() *AgentConfig {
@@ -310,7 +271,6 @@ func LoadAgentConfig() *AgentConfig {
 		ServerRegion:    os.Getenv("SERVER_REGION"),
 		ServerCity:      os.Getenv("SERVER_CITY"),
 		ServerCountry:   os.Getenv("SERVER_COUNTRY"),
-		UpstreamDNS:     envOrDefault("UPSTREAM_DNS", "1.1.1.1:53"),
 	}
 }
 
@@ -328,15 +288,12 @@ type Agent struct {
 	peerManager   *peer.Manager
 	fwManager     *firewall.Manager
 	metrics       *metrics.Metrics
-	metricsSrv    *http.Server
 	managerClient AgentManagerClient
 	serverID      string
 	publicKey     string
 	startTime     time.Time
 	prevRXBytes   int64
 	prevTXBytes   int64
-	dnsForwarder  *dns.Forwarder
-	wg            sync.WaitGroup
 }
 
 func NewAgent(cfg *AgentConfig, logger *logging.Logger) (*Agent, error) {
@@ -392,37 +349,20 @@ func (a *Agent) Run() error {
 		}
 	}
 
-	dnsListenAddr := dnsServerFromSubnet(a.cfg.WGSubnet)
-	a.dnsForwarder = dns.New(dnsListenAddr, a.cfg.UpstreamDNS, a.logger)
-	if err := a.dnsForwarder.Start(ctx); err != nil {
-		a.logger.Warn("DNS forwarder start failed (non-fatal)", zap.Error(err))
-	}
-
 	a.logger.Info("Registered with wg-manager",
 		zap.String("server_id", resp.ServerID))
 
 	a.metrics = metrics.New(a.cfg.MetricsPort)
-	a.metricsSrv = a.metrics.Server()
 
-	a.wg.Add(1)
 	go func() {
-		defer a.wg.Done()
-		if err := a.metrics.StartWithServer(a.metricsSrv); err != nil && err != http.ErrServerClosed {
+		if err := a.metrics.Start(); err != nil {
 			a.logger.Error("Metrics server error", zap.Error(err))
 		}
 	}()
 
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		a.heartbeatLoop(ctx)
-	}()
+	go a.heartbeatLoop(ctx)
 
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		a.streamLoop(ctx)
-	}()
+	go a.streamLoop(ctx)
 
 	a.logger.Info("Agent running",
 		zap.String("interface", a.cfg.WGInterface),
@@ -435,19 +375,6 @@ func (a *Agent) Run() error {
 	a.logger.Info("Received signal, shutting down", zap.String("signal", sig.String()))
 
 	cancel()
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdownCancel()
-	if err := a.metricsSrv.Shutdown(shutdownCtx); err != nil {
-		a.logger.Error("Metrics server shutdown error", zap.Error(err))
-	}
-
-	a.wg.Wait()
-
-	a.logger.Info("Shutting down DNS forwarder")
-	if err := a.dnsForwarder.Shutdown(); err != nil {
-		a.logger.Error("DNS forwarder shutdown error", zap.Error(err))
-	}
 
 	a.logger.Info("Cleaning up firewall rules")
 	if err := a.fwManager.Cleanup(); err != nil {
@@ -505,25 +432,12 @@ func (a *Agent) setupFirewall() error {
 	if err := ensureForwardAccept(a.cfg.WGInterface); err != nil {
 		a.logger.Warn("iptables FORWARD accept failed (non-fatal)", zap.Error(err))
 	}
-	if err := ensureMSSClamp(a.cfg.WGInterface); err != nil {
-		a.logger.Warn("iptables MSS clamp failed (non-fatal)", zap.Error(err))
-	}
-
-	if os.Getenv("FIREWALL_BACKEND") == "iptables" {
-		a.logger.Info("Firewall rules configured (iptables-only)",
-			zap.String("interface", a.cfg.WGInterface),
-			zap.Int("port", a.cfg.WGPort))
-		return nil
-	}
 
 	if err := a.fwManager.SetupNAT(a.cfg.WGInterface); err != nil {
 		a.logger.Warn("NAT setup failed (non-fatal)", zap.Error(err))
 	}
 	if err := a.fwManager.SetupKillSwitch(a.cfg.WGInterface, a.cfg.WGPort); err != nil {
 		a.logger.Warn("Kill switch setup failed (non-fatal)", zap.Error(err))
-	}
-	if err := a.fwManager.SetupMSSClamp(a.cfg.WGInterface); err != nil {
-		a.logger.Warn("MSS clamping setup failed (non-fatal)", zap.Error(err))
 	}
 
 	a.logger.Info("Firewall rules configured",
@@ -534,12 +448,6 @@ func (a *Agent) setupFirewall() error {
 
 func enableIPForward() error {
 	return os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
-}
-
-func iptablesCommand(args ...string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), iptablesTimeout)
-	defer cancel()
-	return exec.CommandContext(ctx, "iptables", args...).Run()
 }
 
 func ensureMasquerade(subnet, wgIface string) error {
@@ -562,9 +470,11 @@ func ensureMasquerade(subnet, wgIface string) error {
 	if check.Run() == nil {
 		return nil
 	}
-	return iptablesCommand("-t", "nat", "-A", "POSTROUTING", "-s", subnet, "-o", egress, "-j", "MASQUERADE")
+	return exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", subnet, "-o", egress, "-j", "MASQUERADE").Run()
 }
 
+// ensureForwardAccept inserts ACCEPT rules at the top of FORWARD so WG traffic is
+// not dropped by a default DROP policy / UFW reject rules later in the chain.
 func ensureForwardAccept(wgIface string) error {
 	if wgIface == "" {
 		wgIface = "wg0"
@@ -573,38 +483,17 @@ func ensureForwardAccept(wgIface string) error {
 	_ = exec.Command("iptables", "-D", "FORWARD", "-o", wgIface, "-j", "ACCEPT").Run()
 	_ = exec.Command("iptables", "-D", "FORWARD", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT").Run()
 
-	if err := iptablesCommand("-I", "FORWARD", "1", "-o", wgIface, "-j", "ACCEPT"); err != nil {
+	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-o", wgIface, "-j", "ACCEPT").Run(); err != nil {
 		return err
 	}
-	if err := iptablesCommand("-I", "FORWARD", "1", "-i", wgIface, "-j", "ACCEPT"); err != nil {
+	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-i", wgIface, "-j", "ACCEPT").Run(); err != nil {
 		return err
 	}
-	return iptablesCommand("-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT")
-}
-
-func ensureMSSClamp(wgIface string) error {
-	if wgIface == "" {
-		wgIface = "wg0"
-	}
-	egress := os.Getenv("EGRESS_IFACE")
-	if egress == "" {
-		out, err := exec.Command("sh", "-c", "ip route show default | awk '{print $5; exit}'").Output()
-		if err != nil {
-			return err
-		}
-		egress = strings.TrimSpace(string(out))
-	}
-	if egress == "" {
-		return fmt.Errorf("no egress iface")
-	}
-
-	_ = exec.Command("iptables", "-t", "mangle", "-D", "FORWARD", "-o", wgIface, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu").Run()
-	_ = exec.Command("iptables", "-t", "mangle", "-D", "FORWARD", "-i", wgIface, "-o", egress, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu").Run()
-
-	if err := iptablesCommand("-t", "mangle", "-A", "FORWARD", "-o", wgIface, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu"); err != nil {
+	if err := exec.Command("iptables", "-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT").Run(); err != nil {
 		return err
 	}
-	return iptablesCommand("-t", "mangle", "-A", "FORWARD", "-i", wgIface, "-o", egress, "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu")
+	_ = exec.Command("iptables", "-D", "FORWARD", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu").Run()
+	return exec.Command("iptables", "-I", "FORWARD", "1", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--clamp-mss-to-pmtu").Run()
 }
 
 func (a *Agent) registerWithManager(ctx context.Context) (*RegisterServerResponse, error) {
@@ -669,9 +558,6 @@ func (a *Agent) heartbeatLoop(ctx context.Context) {
 }
 
 func (a *Agent) streamLoop(ctx context.Context) {
-	backoff := time.Second
-	const maxBackoff = 2 * time.Minute
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -680,45 +566,34 @@ func (a *Agent) streamLoop(ctx context.Context) {
 		}
 
 		a.logger.Info("Connecting to peer update stream")
-
-		streamCtx, streamCancel := context.WithCancel(ctx)
-		updates, errs := a.managerClient.StreamPeerUpdates(streamCtx, a.serverID, a.cfg.AuthToken)
+		updates, errs := a.managerClient.StreamPeerUpdates(ctx, a.serverID, a.cfg.AuthToken)
 
 		for {
 			select {
 			case update, ok := <-updates:
 				if !ok {
 					a.logger.Warn("Peer update stream closed, reconnecting...")
-					streamCancel()
 					goto reconnect
 				}
 				a.handlePeerUpdate(update)
 			case err, ok := <-errs:
 				if !ok || err == io.EOF {
-					streamCancel()
 					goto reconnect
 				}
 				if err != nil {
 					a.logger.Error("Peer update stream error", zap.Error(err))
-					streamCancel()
 					goto reconnect
 				}
 			case <-ctx.Done():
-				streamCancel()
 				return
 			}
 		}
 
 	reconnect:
-		streamCancel()
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(backoff):
-		}
-		backoff *= 2
-		if backoff > maxBackoff {
-			backoff = maxBackoff
+		case <-time.After(5 * time.Second):
 		}
 	}
 }
@@ -726,7 +601,7 @@ func (a *Agent) streamLoop(ctx context.Context) {
 func (a *Agent) handlePeerUpdate(update *PeerUpdate) {
 	switch update.Action {
 	case "ADD":
-		if err := a.peerManager.AddPeer(update.PeerID, update.PublicKey, update.PresharedKey, update.AllowedIPs); err != nil {
+		if err := a.peerManager.AddPeer(update.PeerID, update.PublicKey, update.PresharedKey, []string{"0.0.0.0/0"}); err != nil {
 			a.logger.Error("Failed to add peer",
 				zap.String("peer_id", update.PeerID), zap.Error(err))
 			return

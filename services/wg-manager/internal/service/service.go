@@ -210,9 +210,28 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, pr
 		return nil, err
 	}
 
-	assignedIP, err := s.redis.AllocateIP(ctx, srv.ID, srv.WGSubnet)
-	if err != nil {
-		return nil, fmt.Errorf("allocate ip: %w", err)
+	// Redis is an allocation accelerator, not the source of truth. Its bitmap
+	// can be lost, so always reconcile each candidate with PostgreSQL. Used
+	// candidates deliberately remain marked in Redis, rebuilding the bitmap as
+	// allocations are attempted after a cache reset.
+	var assignedIP string
+	for attempts := 0; attempts < 254; attempts++ {
+		candidate, err := s.redis.AllocateIP(ctx, srv.ID, srv.WGSubnet)
+		if err != nil {
+			return nil, fmt.Errorf("allocate ip: %w", err)
+		}
+		used, err := s.postgres.IsActiveIPAssigned(ctx, srv.ID, candidate)
+		if err != nil {
+			_ = s.redis.ReleaseIP(ctx, srv.ID, candidate)
+			return nil, err
+		}
+		if !used {
+			assignedIP = candidate
+			break
+		}
+	}
+	if assignedIP == "" {
+		return nil, fmt.Errorf("no available IPs in subnet %s", srv.WGSubnet)
 	}
 
 	psk, err := generatePSK()

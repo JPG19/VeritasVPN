@@ -46,8 +46,8 @@
                 <h1>VeritasVPN for Linux</h1>
                 <p>Native Tauri desktop app — sets system-wide SOCKS5 proxy to route traffic through VeritasVPN.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
-                    <a class="btn btn-primary btn-lg" href="https://github.com/JPG19/VeritasVPN/releases/latest/download/VeritasVPN-Linux.deb" download>Download .deb</a>
-                    <a class="btn btn-outline btn-lg" href="https://github.com/JPG19/VeritasVPN/releases/latest/download/VeritasVPN-Linux.AppImage" download>Download .AppImage</a>
+                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-linux.deb" download>Download .deb</a>
+                    <a class="btn btn-outline btn-lg" href="https://github.com/JPG19/VeritasVPN/releases" target="_blank" rel="noopener">Get .AppImage from releases</a>
                 </div>
             </div>
         </section>
@@ -106,19 +106,13 @@
                 </div>
                 <button type="button" class="auth-reset" id="authReset">Forgot password?</button>
                 <button type="submit" class="btn btn-primary btn-block" id="authSubmit">Sign in</button>
-                <p class="auth-note is-hidden" id="authAnonNote">This account ID will be shown only once. A .txt file will download automatically.</p>
             </form>
-            <div id="authForgot" class="auth-forgot" hidden>
-                <label class="auth-field"><span>Email</span><input type="email" id="authForgotEmail" required></label>
-                <button type="button" class="btn btn-primary btn-block" id="authForgotSubmit">Send reset link</button>
-                <button type="button" class="auth-forgot-back" id="authForgotBack">Back to sign in</button>
-            </div>
             <button type="button" class="auth-anon-link" id="authAnonSignup">Skip email — create anonymous account</button>
             <button type="button" class="auth-anon-link" id="authAnonSignin" hidden>Sign in with Account ID instead</button>
             <div class="auth-divider"><span>or</span></div>
             <button type="button" class="auth-switch" id="authSwitchHint">Don't have an account? Sign up</button>
         </div>
     </div>
-    <script type="module" src="../js/main.js?v=brand4"></script>
+    <script type="module" src="../js/main.js"></script>
 </body>
 </html>

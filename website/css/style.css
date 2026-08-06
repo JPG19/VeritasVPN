@@ -770,6 +770,103 @@ button { font-family: inherit; }
 }
 .downloads-teaser-cta { margin-top: 24px; }
 
+/* —— Downloads full page —— */
+.downloads-hero {
+  text-align: center;
+  padding: 80px 0 48px;
+}
+.downloads-hero-mark {
+  margin-bottom: 24px;
+}
+.downloads-hero h1 {
+  font-family: var(--display);
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+.downloads-hero p {
+  max-width: 540px;
+  margin: 0 auto;
+  color: var(--paper-muted);
+}
+
+.download-category {
+  margin-top: 48px;
+}
+.download-category-header {
+  margin-bottom: 24px;
+}
+.download-category-header h2 {
+  font-family: var(--display);
+  font-size: 1.5rem;
+}
+.download-category-header p {
+  color: var(--paper-muted);
+  margin-top: 4px;
+}
+
+.download-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.download-platform {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 220px;
+  min-width: 200px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--ink-2);
+  color: var(--paper);
+  transition: border-color 0.2s, transform 0.2s;
+}
+.download-platform:hover {
+  border-color: rgba(0, 210, 255, 0.4);
+  transform: translateY(-1px);
+}
+.download-platform[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+.download-platform[aria-disabled="true"]:hover {
+  border-color: var(--line);
+  transform: none;
+}
+.download-platform-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--ink-3);
+  color: var(--paper-dim);
+}
+.download-platform-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.download-platform-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.download-platform-status {
+  font-size: 0.8rem;
+  color: var(--paper-muted);
+}
+
+.downloads-page .download-featured-card .btn {
+  margin-top: auto;
+}
+.downloads-page .download-featured-card {
+  display: flex;
+  flex-direction: column;
+}
+
 /* —— FAQ —— */
 .faq-list { max-width: 760px; }
 .faq-item { border-bottom: 1px solid var(--line); }

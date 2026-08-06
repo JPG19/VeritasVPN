@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="VeritasVPN for macOS. Apple Silicon build (M1/M2/M3).">
-    <title>VeritasVPN for macOS — Planned</title>
+    <meta name="description" content="Download the VeritasVPN Apple Silicon test build for macOS.">
+    <title>Download VeritasVPN for macOS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
@@ -44,10 +44,10 @@
     <main class="downloads-page">
         <section class="downloads-hero">
             <div class="container">
-                <h1>macOS (Apple Silicon)</h1>
-                <p>Native desktop app for M1/M2/M3 Macs. Unsigned build — see instructions below to open.</p>
+                <h1>VeritasVPN for macOS</h1>
+                <p>A WireGuard-only Apple Silicon build connected to the VeritasVPN node in Paraguay.</p>
                 <div class="hero-actions" style="justify-content:center;margin-top:28px;">
-                    <a class="btn btn-primary btn-lg" href="https://github.com/JPG19/VeritasVPN/releases/latest/download/VeritasVPN-macOS.dmg" download>Download for macOS (.dmg)</a>
+                    <a class="btn btn-primary btn-lg" href="/downloads/veritasvpn-macos-906b23ae.dmg" download>Download for Apple Silicon</a>
                     <a class="btn btn-outline btn-lg" href="/downloads.html">View available platforms</a>
                 </div>
             </div>
@@ -55,9 +55,13 @@
 
         <section class="downloads">
             <div class="container install-steps">
-                <h2>Apple notarization</h2>
-                <p class="downloads-note">This is an unsigned build — Apple will block it by default. Right-click the app in Finder and select <strong>Open</strong>, then click <strong>Open</strong> again in the dialog. This bypasses Gatekeeper for this app only.</p>
-                <p class="downloads-note" style="margin-top:10px;">A proper signed and notarized build will come once we enroll in the Apple Developer Program.</p>
+                <h2>Install the test build</h2>
+                <ol>
+                    <li>Download and open the DMG, then drag VeritasVPN into Applications.</li>
+                    <li>Open VeritasVPN, register or sign in, and press Connect.</li>
+                    <li>Approve the macOS administrator prompt so the app can configure the WireGuard tunnel.</li>
+                </ol>
+                <p class="downloads-note"><strong>Compatibility:</strong> macOS 12 or newer on Apple Silicon. This test build uses an ad-hoc integrity signature and is not yet Apple-notarized.</p>
             </div>
         </section>
     </main>
@@ -82,19 +86,13 @@
                 </div>
                 <button type="button" class="auth-reset" id="authReset">Forgot password?</button>
                 <button type="submit" class="btn btn-primary btn-block" id="authSubmit">Sign in</button>
-                <p class="auth-note is-hidden" id="authAnonNote">This account ID will be shown only once. A .txt file will download automatically.</p>
             </form>
-            <div id="authForgot" class="auth-forgot" hidden>
-                <label class="auth-field"><span>Email</span><input type="email" id="authForgotEmail" required></label>
-                <button type="button" class="btn btn-primary btn-block" id="authForgotSubmit">Send reset link</button>
-                <button type="button" class="auth-forgot-back" id="authForgotBack">Back to sign in</button>
-            </div>
             <button type="button" class="auth-anon-link" id="authAnonSignup">Skip email — create anonymous account</button>
             <button type="button" class="auth-anon-link" id="authAnonSignin" hidden>Sign in with Account ID instead</button>
             <div class="auth-divider"><span>or</span></div>
             <button type="button" class="auth-switch" id="authSwitchHint">Don't have an account? Sign up</button>
         </div>
     </div>
-    <script type="module" src="../js/main.js?v=brand5"></script>
+    <script type="module" src="../js/main.js"></script>
 </body>
 </html>

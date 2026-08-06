@@ -50,8 +50,6 @@ spec:
                 - NET_RAW
                 - SYS_MODULE
           env:
-            - name: FIREWALL_BACKEND
-              value: "iptables"
             - name: AGENT_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -108,22 +106,6 @@ spec:
           volumeMounts:
             - name: wireguard
               mountPath: /etc/wireguard
-          readinessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - ip link show wg0 >/dev/null 2>&1 && ss -lntu | grep -q 51820
-            initialDelaySeconds: 30
-            periodSeconds: 15
-          livenessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - ip link show wg0 >/dev/null 2>&1 && ss -lntu | grep -q 51820
-            initialDelaySeconds: 60
-            periodSeconds: 30
           resources:
             requests:
               cpu: 50m
@@ -134,5 +116,5 @@ spec:
       volumes:
         - name: wireguard
           hostPath:
-            path: /opt/veritasvpn/data/wireguard
+            path: /home/jpg/VeritasVPN/data/wireguard
             type: Directory

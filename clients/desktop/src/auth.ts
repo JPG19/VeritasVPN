@@ -27,7 +27,12 @@ export interface User {
 
 function humanizeError(msg: string): string {
   const m = msg.toLowerCase();
-  if (m.includes("email")) return "Invalid email address.";
+  if (m.includes("incorrect email or password") || m.includes("invalid email or password")) {
+    return "Incorrect email or password.";
+  }
+  if (m.includes("email") && (m.includes("invalid") || m.includes("format"))) {
+    return "Invalid email address.";
+  }
   if (m.includes("password")) {
     if (m.includes("6")) return "Password must be at least 6 characters.";
     return "Incorrect email or password.";
@@ -105,12 +110,13 @@ export async function signIn(
   email: string,
   password: string
 ): Promise<User> {
+  const normalizedEmail = email.trim().toLowerCase();
   const data = await authAPI("/api/v1/auth/signin", {
-    email,
+    email: normalizedEmail,
     password,
   });
   return persistSession(
-    { email: data.email || email, account_id: data.account_id },
+    { email: data.email || normalizedEmail, account_id: data.account_id },
     data
   );
 }
@@ -119,11 +125,12 @@ export async function signUp(
   email: string,
   password: string
 ): Promise<User> {
+  const normalizedEmail = email.trim().toLowerCase();
   const data = await authAPI("/api/v1/auth/register", {
-    email,
+    email: normalizedEmail,
     password,
   });
-  return persistSession({ email, account_id: data.account_id }, data);
+  return persistSession({ email: normalizedEmail, account_id: data.account_id }, data);
 }
 
 /** Sign in with an anonymous (or any) account ID — no password. */

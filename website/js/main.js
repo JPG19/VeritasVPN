@@ -1,14 +1,26 @@
 import { initAuthUI } from './auth.js';
 import { initBillingUI } from './billing.js?v=3';
 import { mountNetworkMap } from './network-map.js';
+import { isAlphaEnabled } from './config.js?v=alpha';
 
 document.addEventListener('DOMContentLoaded', () => {
     const navbar = document.getElementById('navbar');
     const mobileToggle = document.getElementById('mobileToggle');
     const navLinks = document.querySelector('.nav-links');
 
-    initAuthUI();
-    initBillingUI();
+    const alpha = isAlphaEnabled();
+
+    if (alpha) {
+        initAuthUI();
+        initBillingUI();
+    } else {
+        document.querySelectorAll('[data-auth-open], [data-auth-gate]').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                alert('VeritasVPN is in early access. Visit with an invite link to sign in.');
+            });
+        });
+    }
 
     const heroMap = document.getElementById('heroMap');
     const panelMap = document.getElementById('panelMap');

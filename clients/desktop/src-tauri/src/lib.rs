@@ -8,12 +8,6 @@ use tauri::{AppHandle, Manager};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ProxyConfig {
-    pub host: String,
-    pub port: u16,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct WgTunnelConfig {
     pub private_key: String,
     pub address: String,
@@ -103,79 +97,13 @@ fn resolve_wireguard_go(app: &AppHandle) -> Result<PathBuf, String> {
 
 #[tauri::command]
 fn wireguard_available(app: AppHandle) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = app;
+        return false;
+    }
+    #[cfg(not(target_os = "windows"))]
     resolve_wireguard_go(&app).is_ok()
-}
-
-fn is_process_alive(pid: u32) -> bool {
-    std::process::Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-fn cleanup_stale_state(dir: &std::path::Path) {
-    let _ = std::fs::remove_file(dir.join("wireguard-go.pid"));
-    let _ = std::fs::remove_file(dir.join("iface"));
-    let _ = std::fs::remove_file(dir.join("iface.meta"));
-}
-
-#[tauri::command]
-fn tunnel_status() -> bool {
-    let dir = match state_dir() {
-        Ok(d) => d,
-        Err(_) => return false,
-    };
-    let pid_file = dir.join("wireguard-go.pid");
-    let iface_file = dir.join("iface");
-    if !pid_file.exists() || !iface_file.exists() {
-        return false;
-    }
-    let pid = match std::fs::read_to_string(&pid_file) {
-        Ok(s) => s.trim().parse::<u32>().unwrap_or(0),
-        Err(_) => 0,
-    };
-    if pid == 0 || !is_process_alive(pid) {
-        cleanup_stale_state(&dir);
-        return false;
-    }
-    let iface = match std::fs::read_to_string(&iface_file) {
-        Ok(s) => s.trim().to_string(),
-        Err(_) => {
-            cleanup_stale_state(&dir);
-            return false;
-        }
-    };
-    if iface.is_empty() {
-        cleanup_stale_state(&dir);
-        return false;
-    }
-    let ok = std::process::Command::new("ifconfig")
-        .arg(&iface)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    if !ok {
-        cleanup_stale_state(&dir);
-        return false;
-    }
-    true
-}
-
-#[tauri::command]
-fn saved_peer_id() -> String {
-    peer_id_path().ok().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default().trim().to_string()
-}
-
-#[tauri::command]
-fn clear_saved_state() {
-    if let Ok(dir) = state_dir() {
-        let _ = std::fs::remove_file(dir.join("peer_id"));
-    }
 }
 
 #[tauri::command]
@@ -199,59 +127,35 @@ fn b64_key_to_hex(b64: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn connect_wireguard(app: AppHandle, config: WgTunnelConfig) -> ConnectResult {
-    let peer_id = config.peer_id.clone();
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let result = bring_up_wireguard(&app, &config);
-        let _ = tx.send(result);
-    });
-    match rx.recv() {
-        Ok(Ok(msg)) => ConnectResult {
+fn connect_wireguard(app: AppHandle, config: WgTunnelConfig) -> ConnectResult {
+    match bring_up_wireguard(&app, &config) {
+        Ok(msg) => ConnectResult {
             success: true,
             message: msg,
             mode: "wireguard".into(),
-            peer_id,
+            peer_id: config.peer_id,
         },
-        Ok(Err(e)) => ConnectResult {
+        Err(e) => ConnectResult {
             success: false,
             message: e,
             mode: "wireguard".into(),
-            peer_id,
-        },
-        Err(_) => ConnectResult {
-            success: false,
-            message: "internal error: connection handler panicked".into(),
-            mode: "wireguard".into(),
-            peer_id: String::new(),
+            peer_id: config.peer_id,
         },
     }
 }
 
 #[tauri::command]
-async fn disconnect_wireguard(app: AppHandle) -> ConnectResult {
-    let app_clone = app.clone();
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let result = bring_down_wireguard(&app_clone);
-        let _ = tx.send(result);
-    });
-    match rx.recv() {
-        Ok(Ok(msg)) => ConnectResult {
+fn disconnect_wireguard(app: AppHandle) -> ConnectResult {
+    match bring_down_wireguard(&app) {
+        Ok(msg) => ConnectResult {
             success: true,
             message: msg,
             mode: "wireguard".into(),
             peer_id: String::new(),
         },
-        Ok(Err(e)) => ConnectResult {
+        Err(e) => ConnectResult {
             success: false,
             message: e,
-            mode: "wireguard".into(),
-            peer_id: String::new(),
-        },
-        Err(_) => ConnectResult {
-            success: false,
-            message: "internal error: disconnect handler panicked".into(),
             mode: "wireguard".into(),
             peer_id: String::new(),
         },
@@ -292,7 +196,6 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
     for ip in &allowed {
         uapi.push_str(&format!("allowed_ip={}\n", ip.trim()));
     }
-    uapi.push_str("dns=1.1.1.1\n");
     uapi.push('\n');
 
     let uapi_path = dir.join("uapi.txt");
@@ -311,19 +214,18 @@ fn bring_up_wireguard(app: &AppHandle, config: &WgTunnelConfig) -> Result<String
     .ok();
     fs::write(peer_id_path()?, config.peer_id.as_bytes()).ok();
 
-    #[cfg(target_os = "macos")]
-    let service = get_active_network_service().unwrap_or_default();
-    #[cfg(not(target_os = "macos"))]
-    let service = String::new();
-
     let script = build_bringup_script(
         &wg_go,
         &uapi_path,
         &iface_file,
         &pid_file,
         &address,
+        if config.dns.trim().is_empty() {
+            "1.1.1.1"
+        } else {
+            config.dns.trim()
+        },
         &endpoint,
-        &service,
     );
 
     fs::write(&script_path, script).map_err(|e| format!("write script: {e}"))?;
@@ -347,8 +249,8 @@ fn build_bringup_script(
     iface_file: &Path,
     pid_file: &Path,
     address: &str,
+    dns: &str,
     endpoint: &str,
-    service: &str,
 ) -> String {
     format!(
         r#"#!/bin/bash
@@ -358,9 +260,11 @@ UAPI='{uapi}'
 IFACE_FILE='{iface_file}'
 PID_FILE='{pid_file}'
 META_FILE='{iface_file}.meta'
+DNS_BACKUP="${{META_FILE}}.dns"
 ADDR='{address}'
+DNS='{dns}'
 ENDPOINT='{endpoint}'
-SERVICE='{service}'
+trap 'rm -f "$UAPI"' EXIT
 
 # --- tear down any previous Veritas tunnel (best-effort) ---
 if [[ -f "$PID_FILE" ]]; then
@@ -435,11 +339,36 @@ if "errno=0" not in resp:
 PY
 
 ifconfig "$IFACE" inet "$ADDR" "$ADDR" netmask 255.255.255.255 up
+ifconfig "$IFACE" mtu 1420
+
+# Prove that WireGuard is exchanging encrypted traffic before changing the
+# machine-wide default route or DNS. A failed handshake must never take the
+# user's normal internet connection down.
+route -n delete -net 10.0.0.0/24 -interface "$IFACE" 2>/dev/null || true
+route -n add -net 10.0.0.0/24 -interface "$IFACE"
+if ! ping -c 3 -W 1000 10.0.0.1 >/tmp/veritas-wg-handshake.log 2>&1; then
+  route -n delete -net 10.0.0.0/24 -interface "$IFACE" 2>/dev/null || true
+  ifconfig "$IFACE" down 2>/dev/null || true
+  kill "$(cat "$PID_FILE")" 2>/dev/null || true
+  rm -f "$PID_FILE" "$IFACE_FILE" "$META_FILE" /var/run/wireguard/*.sock
+  echo "WireGuard handshake with the Dell VPN server failed; normal internet was left unchanged" >&2
+  exit 1
+fi
 
 # Keep the VPN server reachable outside the tunnel.
 if [[ -n "$ENDPOINT_IP" && -n "$GW" ]]; then
   route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
   route -n add -host "$ENDPOINT_IP" "$GW"
+fi
+
+# macOS attaches DNS configured with networksetup to the physical service.
+# Pin the DHCP-provided public resolvers through the physical gateway before
+# adding the split default. Web traffic still uses WireGuard.
+if [[ -n "$GW" ]]; then
+  route -n delete -host 1.1.1.1 2>/dev/null || true
+  route -n delete -host 8.8.8.8 2>/dev/null || true
+  route -n add -host 1.1.1.1 "$GW"
+  route -n add -host 8.8.8.8 "$GW"
 fi
 
 # Split default (like wg-quick) so we don't replace the system default route entry.
@@ -448,17 +377,81 @@ route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
 route -n add -net 0.0.0.0/1 -interface "$IFACE"
 route -n add -net 128.0.0.0/1 -interface "$IFACE"
 
-# Set system DNS servers
-if [[ -n "$SERVICE" ]]; then
-  networksetup -setdnsservers "$SERVICE" 1.1.1.1
-  # Force DNS traffic through the VPN tunnel
-  sleep 0.5
-  route -n add 1.1.1.1/32 -interface "$IFACE" 2>/dev/null || true
+# Active network service for DNS (not "first listed").
+SERVICE="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$GW_IF" '
+  /^\(Hardware Port:/ {{
+    name=$0
+    sub(/^\(Hardware Port: /, "", name)
+    sub(/,.*/, "", name)
+  }}
+  /Device: / {{
+    dev=$2
+    sub(/\).*/, "", dev)
+    if (iface != "" && dev == iface) {{ print name; exit }}
+  }}
+')"
+if [[ -z "$SERVICE" ]]; then
+  SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
 fi
+if [[ -z "$SERVICE" ]]; then SERVICE="Wi-Fi"; fi
+networksetup -getdnsservers "$SERVICE" > "$DNS_BACKUP" 2>/dev/null || true
+# These are also the resolvers advertised by DHCP on the current test network.
+if [[ -z "$GW" ]] || ! networksetup -setdnsservers "$SERVICE" 1.1.1.1 8.8.8.8; then
+  echo "Could not configure VPN DNS on $SERVICE" >&2
+  exit 1
+fi
+dscacheutil -flushcache 2>/dev/null || true
+killall -HUP mDNSResponder 2>/dev/null || true
 
 # Persist enough state for a reliable teardown even if the app crashes.
-printf 'endpoint_ip=%s\ngateway=%s\niface=%s\nservice=%s\n' \
-  "$ENDPOINT_IP" "$GW" "$IFACE" "$SERVICE" > "$META_FILE"
+printf 'endpoint_ip=%s\ngateway=%s\nservice=%s\niface=%s\n' \
+  "$ENDPOINT_IP" "$GW" "$SERVICE" "$IFACE" > "$META_FILE"
+
+# Do not report Connected unless DNS and HTTPS both work. Keeping the checks
+# separate makes failures actionable and prevents a false Connected UI.
+DNS_OK=0
+if command -v dig >/dev/null 2>&1; then
+  dig +time=3 +tries=2 @1.1.1.1 api.ipify.org A +short \
+    >/tmp/veritas-wg-dns.log 2>/tmp/veritas-wg-dns-error.log && \
+    grep -Eq '^[0-9]+(\.[0-9]+){{3}}$' /tmp/veritas-wg-dns.log && DNS_OK=1
+else
+  dscacheutil -q host -a name api.ipify.org \
+    >/tmp/veritas-wg-dns.log 2>/tmp/veritas-wg-dns-error.log && DNS_OK=1
+fi
+HTTPS_OK=0
+if [[ "$DNS_OK" -eq 1 ]] && \
+   /usr/bin/curl -4 -fsS --connect-timeout 5 --max-time 12 https://api.ipify.org \
+     >/tmp/veritas-wg-egress.log 2>/tmp/veritas-wg-egress-error.log; then
+  HTTPS_OK=1
+fi
+if [[ "$DNS_OK" -ne 1 || "$HTTPS_OK" -ne 1 ]]; then
+  route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
+  route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
+  route -n delete -net 10.0.0.0/24 -interface "$IFACE" 2>/dev/null || true
+  [[ -n "$ENDPOINT_IP" ]] && route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
+  route -n delete -host 1.1.1.1 2>/dev/null || true
+  route -n delete -host 8.8.8.8 2>/dev/null || true
+  DNS_VALUES=()
+  while IFS= read -r VALUE; do
+    [[ "$VALUE" =~ ^[0-9a-fA-F:.]+$ ]] && DNS_VALUES+=("$VALUE")
+  done < "$DNS_BACKUP"
+  if [[ ${{#DNS_VALUES[@]}} -gt 0 ]]; then
+    networksetup -setdnsservers "$SERVICE" "${{DNS_VALUES[@]}}" 2>/dev/null || true
+  else
+    networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
+  fi
+  ifconfig "$IFACE" down 2>/dev/null || true
+  kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
+  rm -f "$PID_FILE" "$IFACE_FILE" "$META_FILE" "$DNS_BACKUP" /var/run/wireguard/*.sock
+  dscacheutil -flushcache 2>/dev/null || true
+  killall -HUP mDNSResponder 2>/dev/null || true
+  if [[ "$DNS_OK" -ne 1 ]]; then
+    echo "VPN DNS validation failed; normal internet was restored" >&2
+  else
+    echo "VPN internet egress validation failed; normal internet was restored" >&2
+  fi
+  exit 1
+fi
 
 echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
 "#,
@@ -467,8 +460,8 @@ echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
         iface_file = iface_file.display(),
         pid_file = pid_file.display(),
         address = address,
+        dns = dns,
         endpoint = endpoint,
-        service = service,
     )
 }
 
@@ -484,6 +477,7 @@ set -uo pipefail
 IFACE_FILE='{iface_file}'
 PID_FILE='{pid_file}'
 META_FILE='{meta_file}'
+DNS_BACKUP="${{META_FILE}}.dns"
 
 ENDPOINT_IP=""
 GW=""
@@ -504,6 +498,7 @@ fi
 
 # Remove full-tunnel split routes (by iface and globally).
 if [[ -n "$IFACE" ]]; then
+  route -n delete -net 10.0.0.0/24 -interface "$IFACE" 2>/dev/null || true
   route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
   route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
   ifconfig "$IFACE" down 2>/dev/null || true
@@ -516,23 +511,39 @@ if [[ -n "$ENDPOINT_IP" ]]; then
   route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
 fi
 
-# Reset DNS servers
-if [[ -n "$SERVICE" ]]; then
-  networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
-fi
-# Remove DNS forced route
-route -n delete 1.1.1.1/32 2>/dev/null || true
+# Remove the temporary physical DNS routes used by the unsigned test build.
+route -n delete -host 1.1.1.1 2>/dev/null || true
+route -n delete -host 8.8.8.8 2>/dev/null || true
 
 # Stop userspace WireGuard.
 if [[ -f "$PID_FILE" ]]; then
-  kill "$(cat "$PID_FILE")" 2>/dev/null || true
-  sleep 0.2
   kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
   rm -f "$PID_FILE"
 fi
 pkill -f '/wireguard-go utun' 2>/dev/null || true
 rm -f /var/run/wireguard/*.sock 2>/dev/null || true
 rm -f "$IFACE_FILE" "$META_FILE"
+
+# Restore DNS on the service we changed, else try common names.
+if [[ -z "$SERVICE" ]]; then
+  SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
+fi
+if [[ -n "$SERVICE" ]]; then
+  DNS_VALUES=()
+  if [[ -f "$DNS_BACKUP" ]]; then
+    while IFS= read -r VALUE; do
+      [[ "$VALUE" =~ ^[0-9a-fA-F:.]+$ ]] && DNS_VALUES+=("$VALUE")
+    done < "$DNS_BACKUP"
+  fi
+  if [[ ${{#DNS_VALUES[@]}} -gt 0 ]]; then
+    networksetup -setdnsservers "$SERVICE" "${{DNS_VALUES[@]}}" 2>/dev/null || true
+  else
+    networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
+  fi
+fi
+rm -f "$DNS_BACKUP"
+dscacheutil -flushcache 2>/dev/null || true
+killall -HUP mDNSResponder 2>/dev/null || true
 
 echo ok
 "#,
@@ -598,76 +609,6 @@ fn run_elevated(script: &Path) -> Result<(), String> {
         }
         Ok(())
     }
-}
-
-#[tauri::command]
-fn connect_socks(config: ProxyConfig) -> ConnectResult {
-    match set_system_proxy(&config.host, config.port) {
-        Ok(msg) => ConnectResult {
-            success: true,
-            message: msg,
-            mode: "socks".into(),
-            peer_id: String::new(),
-        },
-        Err(e) => ConnectResult {
-            success: false,
-            message: e,
-            mode: "socks".into(),
-            peer_id: String::new(),
-        },
-    }
-}
-
-#[tauri::command]
-fn disconnect_socks() -> ConnectResult {
-    match remove_system_proxy() {
-        Ok(msg) => ConnectResult {
-            success: true,
-            message: msg,
-            mode: "socks".into(),
-            peer_id: String::new(),
-        },
-        Err(e) => ConnectResult {
-            success: false,
-            message: e,
-            mode: "socks".into(),
-            peer_id: String::new(),
-        },
-    }
-}
-
-fn set_system_proxy(host: &str, port: u16) -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        return set_proxy_macos(host, port);
-    }
-    #[cfg(target_os = "windows")]
-    {
-        return set_proxy_windows(host, port);
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return set_proxy_linux(host, port);
-    }
-    #[allow(unreachable_code)]
-    Err("Unsupported platform".into())
-}
-
-fn remove_system_proxy() -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        return remove_proxy_macos();
-    }
-    #[cfg(target_os = "windows")]
-    {
-        return remove_proxy_windows();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return remove_proxy_linux();
-    }
-    #[allow(unreachable_code)]
-    Err("Unsupported platform".into())
 }
 
 #[cfg(target_os = "macos")]
@@ -784,18 +725,12 @@ fn remove_proxy_linux() -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             wireguard_available,
-            tunnel_status,
-            saved_peer_id,
-            clear_saved_state,
             generate_wg_keys,
             connect_wireguard,
-            disconnect_wireguard,
-            connect_socks,
-            disconnect_socks
+            disconnect_wireguard
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

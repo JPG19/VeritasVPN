@@ -14,8 +14,10 @@
     "windows": [
       {
         "title": "VeritasVPN",
-        "width": 400,
-        "height": 560,
+        "width": 1080,
+        "height": 720,
+        "minWidth": 820,
+        "minHeight": 620,
         "resizable": true,
         "maximizable": false
       }
@@ -38,7 +40,8 @@
       "resources/bin/**/*"
     ],
     "macOS": {
-      "minimumSystemVersion": "12.0"
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
     },
     "linux": {}
   }

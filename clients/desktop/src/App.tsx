@@ -1,24 +1,23 @@
 import { useState, useEffect, FormEvent, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { fetch } from "@tauri-apps/plugin-http";
 import {
+  getStoredUser,
   getStoredToken,
   refreshSession,
   signIn as doSignIn,
   signUp as doSignUp,
   signInWithAccountId as doSignInAccountId,
   registerAnonymous as doRegisterAnonymous,
-  downloadAccountFile,
   signOut as doSignOut,
   type User,
 } from "./auth";
-import { AUTH_API, DEFAULT_PROXY } from "./config";
+import { AUTH_API } from "./config";
 import "./App.css";
 
 type AuthMode = "signin" | "signup";
 /** Email/password vs Account ID (anonymous) path. */
 type AuthMethod = "email" | "accountId";
-type TunnelMode = "wireguard" | "socks" | "";
+type TunnelMode = "wireguard" | "";
 
 interface ConnectResult {
   success: boolean;
@@ -44,8 +43,66 @@ interface PeerResponse {
   error?: string;
 }
 
+function ConnectionMap({ connected }: { connected: boolean }) {
+  return (
+    <section className={`connection-map ${connected ? "is-connected" : ""}`} aria-label="VPN route from your device to Paraguay">
+      <div className="map-topline">
+        <span>LIVE ROUTE</span>
+        <span className="map-latency">{connected ? "Encrypted" : "Ready"}</span>
+      </div>
+      <svg viewBox="0 0 900 430" role="img" aria-label="World map with a route to the VeritasVPN node in Paraguay">
+        <defs>
+          <linearGradient id="routeGradient" x1="0" x2="1">
+            <stop offset="0" stopColor="#7048ff" />
+            <stop offset="1" stopColor="#28d9c3" />
+          </linearGradient>
+          <filter id="routeGlow">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+        <g className="map-grid">
+          <path d="M0 108H900M0 215H900M0 322H900M225 0V430M450 0V430M675 0V430" />
+        </g>
+        <g className="continents">
+          <path d="M77 99l50-46 92-13 68 26 37 47-20 43-54 9-22 37-37 11-19 43-35-16-12-61-46-31z" />
+          <path d="M248 221l45 27 27 58-17 78-37 37-22-53 8-56-32-53z" />
+          <path d="M421 87l47-36 74 6 37 24 72-14 95 29 74 53-24 37-65 3-38 38-42-16-42 22-27-33-55 8-39-38-54-21z" />
+          <path d="M487 211l64 8 48 43-16 77-46 53-42-39-17-78z" />
+          <path d="M735 311l51-31 66 25 20 52-57 31-65-22z" />
+          <path d="M390 405l133-10 116 16-37 19H432z" />
+        </g>
+        <path className="route-shadow" d="M128 125C255 88 339 164 421 239S535 315 599 319" />
+        <path className="route-line" d="M128 125C255 88 339 164 421 239S535 315 599 319" />
+        <circle className="route-particle particle-one" r="4">
+          <animateMotion dur="2.8s" repeatCount="indefinite" path="M128 125C255 88 339 164 421 239S535 315 599 319" />
+        </circle>
+        <circle className="route-particle particle-two" r="3">
+          <animateMotion begin="1.2s" dur="2.8s" repeatCount="indefinite" path="M128 125C255 88 339 164 421 239S535 315 599 319" />
+        </circle>
+        <g className="map-origin" transform="translate(128 125)">
+          <circle r="5" />
+          <circle className="map-pulse" r="12" />
+        </g>
+        <g className="map-destination" transform="translate(599 319)">
+          <circle className="map-pulse" r="18" />
+          <circle r="8" />
+        </g>
+      </svg>
+      <div className="route-label route-label-origin">
+        <span>Your device</span>
+        <strong>Protected locally</strong>
+      </div>
+      <div className="route-label route-label-destination">
+        <span>PARAGUAY</span>
+        <strong>Asunción metro</strong>
+      </div>
+    </section>
+  );
+}
+
 function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(getStoredUser);
   const [mode, setMode] = useState<AuthMode>("signin");
   const [method, setMethod] = useState<AuthMethod>("email");
   const [email, setEmail] = useState("");
@@ -58,25 +115,12 @@ function App() {
   const [tunnelMode, setTunnelMode] = useState<TunnelMode>("");
   const [peerId, setPeerId] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
-  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     if (!statusMsg) return;
     const t = setTimeout(() => setStatusMsg(""), 5000);
     return () => clearTimeout(t);
   }, [statusMsg]);
-
-  useEffect(() => {
-    invoke<boolean>("tunnel_status").then((up) => {
-      if (up) {
-        invoke<string>("saved_peer_id").then((pid) => {
-          setConnected(true);
-          setTunnelMode("wireguard");
-          setPeerId(pid);
-        });
-      }
-    });
-  }, []);
 
   const switchMode = useCallback((next: AuthMode) => {
     setMode(next);
@@ -106,7 +150,6 @@ function App() {
             const u = await doRegisterAnonymous();
             setNewAccountId(u.account_id);
             setUser(u);
-            downloadAccountFile();
           }
         } else {
           const fn = mode === "signin" ? doSignIn : doSignUp;
@@ -124,22 +167,6 @@ function App() {
     [email, password, accountId, mode, method]
   );
 
-  const connectSocksFallback = useCallback(async (reason: string) => {
-    const result = await invoke<ConnectResult>("connect_socks", {
-      config: {
-        host: DEFAULT_PROXY.host,
-        port: DEFAULT_PROXY.port,
-      },
-    });
-    if (result.success) {
-      setConnected(true);
-      setTunnelMode("socks");
-      setStatusMsg(`${reason} Using browser-style SOCKS fallback.`);
-    } else {
-      setStatusMsg(result.message || reason);
-    }
-  }, []);
-
   const handleConnect = useCallback(async () => {
     setStatusMsg("");
     await refreshSession();
@@ -152,60 +179,29 @@ function App() {
     try {
       const available = await invoke<boolean>("wireguard_available");
       if (!available) {
-        await connectSocksFallback("VPN engine missing from app bundle.");
-        return;
+        throw new Error(
+          "WireGuard is unavailable in this build. No proxy fallback was activated."
+        );
       }
 
       const keys = await invoke<KeyPair>("generate_wg_keys");
-
-      const doCreatePeer = async (): Promise<PeerResponse> => {
-        const res = await fetch(`${AUTH_API}/api/v1/wg/peers`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ public_key: keys.public_key }),
-          maxRedirections: 0,
-        });
-        const data = (await res.json()) as PeerResponse & { code?: string };
-        if (!res.ok) throw data;
-        return data;
-      };
-
-      let peer: PeerResponse & { code?: string };
-      try {
-        peer = await doCreatePeer();
-      } catch (firstErr) {
-        const errData = firstErr as PeerResponse & { code?: string };
-        if (!errData.code?.startsWith("plan_device_limit")) {
-          throw new Error(errData.error || "Failed to create WireGuard peer");
-        }
-        // Try to clean up a leftover peer from a previous
-        // session (e.g. the user killed the app manually).
-        const savedPid = await invoke<string>("saved_peer_id");
-        if (savedPid) {
-          await fetch(`${AUTH_API}/api/v1/wg/peers/${savedPid}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-            maxRedirections: 0,
-          }).catch(() => undefined);
-          await invoke("clear_saved_state");
-          try {
-            peer = await doCreatePeer();
-          } catch (retryErr) {
-            const retryData = retryErr as PeerResponse & { code?: string };
-            throw new Error(
-              retryData.error ||
-                "Device limit reached. Upgrade to Premium for more devices, or disconnect another device first."
-            );
-          }
-        } else {
+      const res = await fetch(`${AUTH_API}/api/v1/wg/peers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ public_key: keys.public_key }),
+      });
+      const peer = (await res.json()) as PeerResponse & { code?: string };
+      if (!res.ok) {
+        if (peer.code?.startsWith("plan_device_limit")) {
           throw new Error(
-            errData.error ||
+            peer.error ||
               "Device limit reached. Upgrade to Premium for more devices, or disconnect another device first."
           );
         }
+        throw new Error(peer.error || "Failed to create WireGuard peer");
       }
 
       const allowed =
@@ -233,98 +229,55 @@ function App() {
         setStatusMsg("Connected via WireGuard");
       } else {
         setStatusMsg(result.message);
-        // Tunnel setup failed — clean up the orphaned peer on the server
-        // so it doesn't count against the device limit on retry.
-        await fetch(`${AUTH_API}/api/v1/wg/peers/${peer.peer_id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-          maxRedirections: 0,
-        }).catch(() => undefined);
       }
     } catch (err) {
       setStatusMsg(
         err instanceof Error ? err.message : "Connection failed"
       );
     }
-  }, [connectSocksFallback]);
+  }, []);
 
   const handleDisconnect = useCallback(async () => {
-    setDisconnecting(true);
     setStatusMsg("Disconnecting…");
-
-    // 1. Tear down local tunnel first — this MUST happen even when
-    //    the internet is broken because of a malfunctioning tunnel.
-    let localOk = false;
+    // Always clear local tunnel UI state so a failed privileged teardown
+    // cannot leave the app stuck showing Connected.
+    const clearUi = () => {
+      setConnected(false);
+      setTunnelMode("");
+      setPeerId("");
+    };
     try {
       if (tunnelMode === "wireguard" || peerId) {
+        const token = getStoredToken();
+        if (token && peerId) {
+          await fetch(`${AUTH_API}/api/v1/wg/peers/${peerId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => undefined);
+        }
         const result = await invoke<ConnectResult>("disconnect_wireguard");
-        localOk = result.success;
-        if (!localOk) {
+        clearUi();
+        if (!result.success) {
           setStatusMsg(
             result.message ||
               "Disconnect incomplete — approve the admin prompt, or run: sudo bash ~/Library/Application\\ Support/cloud.veritasvpn.desktop/teardown.sh"
           );
-          setDisconnecting(false);
           return;
         }
       }
-      if (tunnelMode === "socks") {
-        const result = await invoke<ConnectResult>("disconnect_socks");
-        localOk = result.success;
-      }
+      clearUi();
+      setStatusMsg("Disconnected");
     } catch (err) {
+      clearUi();
       setStatusMsg(
-        err instanceof Error
-          ? err.message
-          : "Disconnect failed — approve the macOS admin prompt"
+        err instanceof Error ? err.message : "Disconnect failed — approve the macOS admin prompt"
       );
-      setDisconnecting(false);
-      return;
-    }
-
-    // Only clear UI after local teardown succeeds.
-    setConnected(false);
-    setTunnelMode("");
-    setPeerId("");
-    setDisconnecting(false);
-    setStatusMsg("Disconnected");
-
-    // 2. Server cleanup — fire and forget, best-effort.
-    if (tunnelMode === "wireguard" && peerId) {
-      const token = getStoredToken();
-      if (token) {
-        const del = fetch(`${AUTH_API}/api/v1/wg/peers/${peerId}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-          maxRedirections: 0,
-        });
-        const timeout = new Promise<void>((res) => setTimeout(res, 5000));
-        Promise.race([del, timeout]).catch(() => undefined);
-      }
     }
   }, [tunnelMode, peerId]);
 
-  const handleSignOut = useCallback(async () => {
+  const handleSignOut = useCallback(() => {
     if (connected) {
-      await handleDisconnect();
-    } else {
-      // The tunnel may have been killed externally (manual process kill)
-      // but the peer still lives on the server. Clean it up now
-      // so the next sign-in doesn't hit "device limit reached".
-      const pid = await invoke<string>("saved_peer_id");
-      if (pid) {
-        const token = getStoredToken();
-        if (token) {
-          const del = fetch(`${AUTH_API}/api/v1/wg/peers/${pid}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-            maxRedirections: 0,
-          });
-          const timeout = new Promise<void>((res) => setTimeout(res, 5000));
-          await Promise.race([del, timeout]).catch(() => undefined);
-          invoke("clear_saved_state");
-        }
-      }
+      handleDisconnect();
     }
     doSignOut();
     setUser(null);
@@ -451,55 +404,55 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <div className="brand">
-        <h1>Veritas<span>VPN</span></h1>
-        <p className="user-email">
-          {user.email || user.account_id}
-        </p>
-        {user.email && user.account_id && (
-          <p className="user-account-id">ID: {user.account_id}</p>
-        )}
-      </div>
-      <div className="status-badge">
-        <span className={`dot ${connected ? "on" : "off"}`} />
-        {connected
-          ? tunnelMode === "wireguard"
-            ? "Connected — WireGuard tunnel"
-            : "Connected — SOCKS fallback"
-          : "Disconnected"}
-      </div>
-      {statusMsg && <div className="status-msg">{statusMsg}</div>}
-      <div className="network-map">
-        <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="300" cy="150" r="145" fill="none" stroke="var(--border)" strokeWidth="0.5" />
-          <text x="300" y="28" textAnchor="middle" fill="var(--text-muted)" fontSize="11">Network map</text>
-          <g transform="translate(300,150)">
-            <circle r="60" fill="var(--surface)" opacity="0.3" />
-            <circle r="3" fill="var(--accent)">
-              <animate attributeName="r" values="3;6;3" dur="2s" repeatCount="indefinite" />
-              <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" />
-            </circle>
-            <text y="22" textAnchor="middle" fill="var(--text)" fontSize="12" fontWeight="600">Paraguay</text>
-            <text y="36" textAnchor="middle" fill="var(--text-muted)" fontSize="11">Asunción metro</text>
-          </g>
-        </svg>
-      </div>
-      {!connected ? (
-        <button className="btn-connect" onClick={handleConnect}>
-          Connect
-        </button>
-      ) : (
-        <button className="btn-disconnect" onClick={handleDisconnect} disabled={disconnecting}>
-          {disconnecting ? "Disconnecting…" : "Disconnect"}
-        </button>
-      )}
-      <button className="btn-signout" onClick={handleSignOut}>
-        Sign out
-      </button>
-      <p className="footer-note">
-        One-click WireGuard VPN — no extra software to install
-      </p>
+    <div className="app app-dashboard">
+      <header className="app-header">
+        <div className="brand brand-inline">
+          <span className="brand-mark">V</span>
+          <div><h1>Veritas<span>VPN</span></h1><p>Privacy is truth.</p></div>
+        </div>
+        <div className="account-menu">
+          <span className="account-avatar">{(user.email || user.account_id || "V").slice(0, 1).toUpperCase()}</span>
+          <div>
+            <strong>{user.email || "Anonymous account"}</strong>
+            <span>Veritas account</span>
+          </div>
+          <button className="btn-signout" onClick={handleSignOut}>Sign out</button>
+        </div>
+      </header>
+
+      <main className="dashboard-main">
+        <ConnectionMap connected={connected} />
+        <aside className="connection-panel">
+          <div className={`status-orb ${connected ? "is-on" : ""}`}>
+            <span className="orb-ring" />
+            <span className="orb-lock">{connected ? "✓" : "V"}</span>
+          </div>
+          <p className="eyebrow">{connected ? "CONNECTION SECURED" : "VPN READY"}</p>
+          <h2>{connected ? "You’re protected" : "Connect to Veritas"}</h2>
+          <p className="connection-copy">
+            {connected
+              ? tunnelMode === "wireguard"
+                ? "Your internet traffic is encrypted through our WireGuard node in Paraguay."
+                : "Your browser traffic is protected through our encrypted proxy in Paraguay."
+              : "Route your traffic privately through our live node in Paraguay."}
+          </p>
+          <div className="server-card">
+            <span className="flag">🇵🇾</span>
+            <div><strong>Paraguay</strong><span>Asunción metro · Automatic</span></div>
+            <span className="server-live">LIVE</span>
+          </div>
+          {!connected ? (
+            <button className="btn-connect" onClick={handleConnect}><span>Connect now</span><i>→</i></button>
+          ) : (
+            <button className="btn-disconnect" onClick={handleDisconnect}>Disconnect</button>
+          )}
+          <div className="connection-meta">
+            <span><i className={`dot ${connected ? "on" : "off"}`} />{connected ? "Protected" : "Not connected"}</span>
+            <span>{tunnelMode === "wireguard" ? "WireGuard" : "WireGuard only"}</span>
+          </div>
+          {statusMsg && <div className="status-msg">{statusMsg}</div>}
+        </aside>
+      </main>
     </div>
   );
 }

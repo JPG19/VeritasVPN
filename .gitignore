@@ -70,6 +70,7 @@ logs/
 # Cloudflared
 cloudflared
 .cloudflared/
+dist-site/
 
 # Cloudflared credentials
 .cloudflared-credentials.json
@@ -95,3 +96,15 @@ deploy/k8s/btcpay/secrets.yaml
 services/veritas-agent/agent
 
 services/wg-manager/server
+
+# Local/generated media tooling
+.video-tools/
+video/
+__pycache__/
+*.pyc
+
+# Keep only explicitly published macOS DMG builds in git.
+website/downloads/veritasvpn-macos-*.dmg
+
+# Website downloads generated outside the current release flow
+website/downloads/veritasvpn-linux.*
