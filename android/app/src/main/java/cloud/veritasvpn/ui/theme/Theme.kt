@@ -1,8 +1,8 @@
 package cloud.veritasvpn.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -11,22 +11,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple800,
-    secondary = Teal400,
-    tertiary = Teal600,
-    background = DarkBg,
-    surface = DarkSurface,
-    surfaceVariant = DarkSurface2,
-    onPrimary = Color.White,
+    primary = Cyan,
+    onPrimary = Ink,
+    primaryContainer = CyanSoft,
+    onPrimaryContainer = Cyan,
+    secondary = Royal,
     onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = TextPrimary,
-    onSurface = TextPrimary,
-    onSurfaceVariant = TextSecondary,
-    outline = DarkBorder,
-    outlineVariant = DarkCard,
+    tertiary = CyanHover,
+    onTertiary = Ink,
+    background = Ink,
+    onBackground = Paper,
+    surface = Ink2,
+    onSurface = Paper,
+    surfaceVariant = Ink3,
+    onSurfaceVariant = PaperMuted,
+    outline = Line,
+    outlineVariant = LineStrong,
     error = ErrorRed,
-    onError = Color.White,
+    onError = Ink,
 )
 
 private val VeritasTypography = Typography(
@@ -39,8 +41,9 @@ private val VeritasTypography = Typography(
     bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp),
     bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp),
     bodySmall = TextStyle(fontWeight = FontWeight.Normal, fontSize = 12.sp),
-    labelLarge = TextStyle(fontWeight = FontWeight.Medium, fontSize = 14.sp, letterSpacing = 1.sp),
-    labelMedium = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 1.sp),
+    labelLarge = TextStyle(fontWeight = FontWeight.Medium, fontSize = 14.sp),
+    labelMedium = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp),
 )
 
 @Composable

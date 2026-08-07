@@ -46,7 +46,7 @@ fun AuthScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBg)
+            .background(Ink)
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -58,9 +58,9 @@ fun AuthScreen(
             text = "VeritasVPN",
             style = MaterialTheme.typography.displayMedium,
             fontWeight = FontWeight.Bold,
-            color = TextPrimary
+            color = Paper
         )
-        Text("Privacy is truth.", color = TextMuted, fontSize = 14.sp)
+        Text("Privacy is truth.", color = PaperDim, fontSize = 14.sp)
 
         Spacer(Modifier.height(32.dp))
 
@@ -69,7 +69,7 @@ fun AuthScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = DarkCard)
+                colors = CardDefaults.cardColors(containerColor = CardBg)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -83,13 +83,13 @@ fun AuthScreen(
                     )
                     Text(
                         "Copy it now — it cannot be recovered:",
-                        color = TextMuted,
+                        color = PaperDim,
                         fontSize = 12.sp
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         newAccountId!!,
-                        color = TextPrimary,
+                        color = Paper,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         textAlign = TextAlign.Center
@@ -99,7 +99,7 @@ fun AuthScreen(
                         onClick = { onAuthenticated() },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Purple800)
+                        colors = ButtonDefaults.buttonColors(containerColor = Cyan)
                     ) { Text("Continue") }
                 }
             }
@@ -198,7 +198,7 @@ fun AuthScreen(
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(25.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Purple800),
+            colors = ButtonDefaults.buttonColors(containerColor = Cyan),
             enabled = !loading
         ) {
             Text(
@@ -224,7 +224,7 @@ fun AuthScreen(
                     if (mode == AuthMode.SIGN_IN) "Sign in with Account ID instead"
                     else "Skip email — create anonymous account"
                 else "Use email instead",
-                color = TextMuted,
+                color = PaperDim,
                 fontSize = 13.sp
             )
         }
@@ -232,7 +232,7 @@ fun AuthScreen(
         if (mode == AuthMode.SIGN_UP && method == AuthMethod.ACCOUNT_ID) {
             Text(
                 "Creates an anonymous account. You'll get an Account ID to save — no email required.",
-                color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center,
+                color = PaperDim, fontSize = 12.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
@@ -244,11 +244,11 @@ private fun TabButton(selected: Boolean, onClick: () -> Unit, text: String) {
     TextButton(
         onClick = onClick,
         colors = ButtonDefaults.textButtonColors(
-            contentColor = if (selected) Color.White else TextMuted
+            contentColor = if (selected) Color.White else PaperDim
         ),
         modifier = Modifier
             .background(
-                if (selected) Purple800.copy(alpha = 0.3f) else DarkCard,
+                if (selected) Cyan.copy(alpha = 0.3f) else CardBg,
                 RoundedCornerShape(20.dp)
             )
     ) {
@@ -258,11 +258,11 @@ private fun TabButton(selected: Boolean, onClick: () -> Unit, text: String) {
 
 @Composable
 private fun inputColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = TextPrimary,
-    unfocusedTextColor = TextPrimary,
-    focusedBorderColor = Purple800,
-    unfocusedBorderColor = DarkBorder,
-    cursorColor = Purple800,
-    focusedLabelColor = Purple800,
-    unfocusedLabelColor = TextMuted
+    focusedTextColor = Paper,
+    unfocusedTextColor = Paper,
+    focusedBorderColor = Cyan,
+    unfocusedBorderColor = LineStrong,
+    cursorColor = Cyan,
+    focusedLabelColor = Cyan,
+    unfocusedLabelColor = PaperDim
 )

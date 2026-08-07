@@ -42,7 +42,7 @@ fun ConnectionMap(modifier: Modifier = Modifier, connected: Boolean) {
         fun Float.y() = this * sy
         fun Offset.cs() = Offset(this.x.x(), this.y.y())
 
-        val bgBrush = Brush.horizontalGradient(listOf(DarkSurface, DarkSurface2, DarkSurface))
+        val bgBrush = Brush.horizontalGradient(listOf(Ink2, Ink3, Ink2))
         drawRect(bgBrush)
 
         val gridColor = Color.White.copy(alpha = 0.04f)
@@ -67,22 +67,23 @@ fun ConnectionMap(modifier: Modifier = Modifier, connected: Boolean) {
         }
         drawPath(routePath, Color.White.copy(alpha = 0.15f), style = Stroke(width = 2.5f * sx))
 
-        val gradient = Brush.linearGradient(listOf(Purple800, Teal400))
-        drawPath(routePath, gradient, style = Stroke(width = 2.5f * sx))
+        val routeColor = Cyan
+        drawPath(routePath, Color.White.copy(alpha = 0.15f), style = Stroke(width = 2.5f * sx))
+        drawPath(routePath, routeColor, style = Stroke(width = 2.5f * sx))
 
         // Particle
-        val particlePos by remember(offset) { mutableStateOf(routePoint(offset, originX, originY, destX, destY, routeCps, sx, sy)) }
-        drawCircle(gradient, 5f * sx, Offset(particlePos.first, particlePos.second))
+        val particlePos = routePoint(offset, originX, originY, destX, destY, routeCps, sx, sy)
+        drawCircle(routeColor, 5f * sx, Offset(particlePos.first, particlePos.second))
 
         // Origin dot
         val originPulse = if (connected) 14f * sx * pulseScale else 14f * sx
-        drawCircle(gradient.copy(alpha = 0.3f), originPulse, Offset(originX.x(), originY.y()))
+        drawCircle(routeColor.copy(alpha = 0.3f), originPulse, Offset(originX.x(), originY.y()))
         drawCircle(Color.White.copy(alpha = 0.8f), 5f * sx, Offset(originX.x(), originY.y()))
 
         // Destination dot
         val destPulse = if (connected) 18f * sx * pulseScale else 18f * sx
-        drawCircle(gradient.copy(alpha = 0.4f), destPulse, Offset(destX.x(), destY.y()))
-        drawCircle(gradient, 8f * sx, Offset(destX.x(), destY.y()))
+        drawCircle(routeColor.copy(alpha = 0.4f), destPulse, Offset(destX.x(), destY.y()))
+        drawCircle(routeColor, 8f * sx, Offset(destX.x(), destY.y()))
     }
 }
 

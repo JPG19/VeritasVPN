@@ -29,7 +29,7 @@ fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBg)
+            .background(Ink)
             .padding(16.dp)
     ) {
         // Header
@@ -44,7 +44,7 @@ fun DashboardScreen(
                         .size(36.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(
-                            Brush.linearGradient(listOf(Purple800, Teal400))
+                            Brush.linearGradient(listOf(Cyan, Cyan))
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -52,12 +52,12 @@ fun DashboardScreen(
                 }
                 Spacer(Modifier.width(8.dp))
                 Column {
-                    Text("VeritasVPN", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("Privacy is truth.", color = TextMuted, fontSize = 11.sp)
+                    Text("VeritasVPN", color = Paper, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Privacy is truth.", color = PaperDim, fontSize = 11.sp)
                 }
             }
             TextButton(onClick = onSignOut) {
-                Text("Sign out", color = TextMuted, fontSize = 13.sp)
+                Text("Sign out", color = PaperDim, fontSize = 13.sp)
             }
         }
 
@@ -74,12 +74,12 @@ fun DashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text("Your device", color = TextMuted, fontSize = 12.sp)
-                Text("Protected locally", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("Your device", color = PaperDim, fontSize = 12.sp)
+                Text("Protected locally", color = PaperMuted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("PARAGUAY", color = TextMuted, fontSize = 12.sp)
-                Text("Asunción metro", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("PARAGUAY", color = PaperDim, fontSize = 12.sp)
+                Text("Asunción metro", color = PaperMuted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
         }
 
@@ -96,13 +96,13 @@ fun DashboardScreen(
                     .clip(CircleShape)
                     .background(
                         if (connected) SuccessGreen.copy(alpha = 0.15f)
-                        else DarkCard
+                        else CardBg
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = if (connected) "✓" else "V",
-                    color = if (connected) SuccessGreen else Purple800,
+                    color = if (connected) SuccessGreen else Cyan,
                     fontWeight = FontWeight.Bold,
                     fontSize = 28.sp
                 )
@@ -112,13 +112,13 @@ fun DashboardScreen(
 
             Text(
                 text = if (connected) "CONNECTION SECURED" else "VPN READY",
-                color = TextMuted,
+                color = PaperDim,
                 fontSize = 12.sp,
                 letterSpacing = 2.sp
             )
             Text(
                 text = if (connected) "You're protected" else "Connect to Veritas",
-                color = TextPrimary,
+                color = Paper,
                 fontWeight = FontWeight.Bold,
                 fontSize = 22.sp
             )
@@ -126,7 +126,7 @@ fun DashboardScreen(
                 text = if (connected)
                     "Your internet traffic is encrypted through our WireGuard node in Paraguay."
                 else "Route your traffic privately through our live node in Paraguay.",
-                color = TextSecondary,
+                color = PaperMuted,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 24.dp)
@@ -139,15 +139,15 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(DarkCard)
+                    .background(CardBg)
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("🇵🇾", fontSize = 24.sp)
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Paraguay", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                    Text("Asunción metro · Automatic", color = TextMuted, fontSize = 12.sp)
+                    Text("Paraguay", color = Paper, fontWeight = FontWeight.SemiBold)
+                    Text("Asunción metro · Automatic", color = PaperDim, fontSize = 12.sp)
                 }
                 Box(
                     modifier = Modifier
@@ -167,7 +167,7 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(26.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (connected) ErrorRed else Purple800
+                    containerColor = if (connected) ErrorRed else Cyan
                 )
             ) {
                 Text(
@@ -187,12 +187,12 @@ fun DashboardScreen(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(if (connected) SuccessGreen else TextMuted)
+                        .background(if (connected) SuccessGreen else PaperDim)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = if (connected) "Protected · WireGuard" else "Not connected",
-                    color = TextMuted,
+                    color = PaperDim,
                     fontSize = 12.sp
                 )
             }

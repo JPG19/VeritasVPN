@@ -5,15 +5,27 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
-import android.net.VpnService
-import android.os.ParcelFileDescriptor
-import android.widget.Toast
+import android.content.pm.ServiceInfo
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import com.wireguard.android.backend.BackendException
+import com.wireguard.android.backend.GoBackend
+import com.wireguard.android.backend.Tunnel
+import com.wireguard.config.Config
 import cloud.veritasvpn.MainActivity
+import cloud.veritasvpn.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import java.io.ByteArrayInputStream
 
-class VeritasVpnService : VpnService() {
-    private var tunFd: ParcelFileDescriptor? = null
-    private var ifname: String = "veritas0"
+class VeritasVpnService : GoBackend.VpnService(), Tunnel {
+
+    private val backend by lazy { GoBackend(applicationContext) }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -21,79 +33,109 @@ class VeritasVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Completes the shared VpnService future used by GoBackend so the backend
+        // reuses THIS instance instead of starting the library's base service.
+        super.onStartCommand(intent, flags, startId)
+
         when (intent?.action) {
             ACTION_CONNECT -> {
-                val config = intent.getStringExtra(EXTRA_CONFIG) ?: ""
-                val address = intent.getStringExtra(EXTRA_ADDRESS) ?: ""
-                connect(config, address)
+                val config = intent.getStringExtra(EXTRA_CONFIG) ?: return START_STICKY
+                startForeground(NOTIFICATION_ID, buildNotification("Connecting…"))
+                scope.launch {
+                    try {
+                        val parsed = Config.parse(ByteArrayInputStream(config.toByteArray(Charsets.UTF_8)))
+                        val state = backend.setState(this@VeritasVpnService, Tunnel.State.UP, parsed)
+                        broadcastState(state == Tunnel.State.UP, null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Connect failed", e)
+                        broadcastState(false, friendlyError(e))
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+                }
             }
-            ACTION_DISCONNECT -> disconnect()
-            Action.STOP -> {
-                disconnect()
+            ACTION_DISCONNECT -> {
+                scope.launch {
+                    try {
+                        backend.setState(this@VeritasVpnService, Tunnel.State.DOWN, null)
+                    } catch (_: Exception) {
+                    }
+                    broadcastState(false, null)
+                }
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+            }
+            else -> {
+                // Re-started by the system (always-on VPN) without an action.
             }
         }
         return START_STICKY
     }
 
-    fun connect(wgConfig: String, address: String) {
-        try {
-            if (!WireGuardBackend.isAvailable()) {
-                Toast.makeText(this, "WireGuard native library not available", Toast.LENGTH_LONG).show()
-                return
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    override fun getName(): String = TUNNEL_NAME
+
+    override fun onStateChange(newState: Tunnel.State) {
+        when (newState) {
+            Tunnel.State.UP -> {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    buildNotification("Connected"),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+                broadcastState(true, null)
             }
-
-            val builder = Builder()
-            builder.setSession("VeritasVPN")
-            builder.addAddress(address, 32)
-            builder.addRoute("0.0.0.0", 0)
-            builder.addRoute("::", 0)
-            builder.addDnsServer("1.1.1.1")
-            builder.addDnsServer("8.8.8.8")
-            builder.setMtu(1420)
-            builder.setBlocking(true)
-
-            tunFd = builder.establish()
-            if (tunFd == null) throw Exception("TUN device creation failed")
-
-            val result = WireGuardBackend.wgTurnOn(ifname, tunFd!!.fd, wgConfig)
-            if (result != 0) {
-                tunFd?.close()
-                tunFd = null
-                throw Exception("WireGuard backend failed with code $result")
+            else -> {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                broadcastState(false, null)
             }
-
-            val notification = buildNotification(true)
-            startForeground(NOTIFICATION_ID, notification)
-        } catch (e: Exception) {
-            Toast.makeText(this, "Connection failed: ${e.message}", Toast.LENGTH_LONG).show()
-            disconnect()
         }
     }
 
-    fun disconnect() {
-        if (WireGuardBackend.isAvailable()) {
-            try { WireGuardBackend.wgTurnOff(ifname) } catch (_: Exception) {}
+    private fun friendlyError(e: Exception): String {
+        if (e is BackendException) {
+            return when (e.reason) {
+                BackendException.Reason.VPN_NOT_AUTHORIZED ->
+                    "VPN permission not granted. Grant VPN access and try again."
+                BackendException.Reason.TUN_CREATION_ERROR ->
+                    "Could not create the VPN tunnel."
+                BackendException.Reason.DNS_RESOLUTION_FAILURE ->
+                    "Could not resolve the server address."
+                BackendException.Reason.UNABLE_TO_START_VPN ->
+                    "Could not start the VPN service."
+                BackendException.Reason.GO_ACTIVATION_ERROR_CODE ->
+                    "The WireGuard backend failed to start (${e.format.joinToString()})."
+                else -> e.message ?: "Connection failed."
+            }
         }
-        try { tunFd?.close() } catch (_: Exception) {}
-        tunFd = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        return e.message?.takeIf { it.isNotBlank() } ?: "Connection failed. Check your network and try again."
     }
 
-    private fun buildNotification(connected: Boolean): Notification {
-        val openIntent = Intent(this, MainActivity::class.java).let {
-            PendingIntent.getActivity(this, 0, it,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        }
+    private fun broadcastState(connected: Boolean, error: String?) {
+        val intent = Intent(ACTION_STATE).setPackage(packageName)
+            .putExtra(EXTRA_CONNECTED, connected)
+        if (error != null) intent.putExtra(EXTRA_ERROR, error)
+        sendBroadcast(intent)
+    }
 
+    private fun buildNotification(text: String): Notification {
+        val openIntent = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("VeritasVPN")
-            .setContentText(if (connected) "Connected — Paraguay" else "Not connected")
-            .setSmallIcon(android.R.drawable.ic_menu_secure)
+            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_stat_veritas)
             .setContentIntent(openIntent)
-            .setOngoing(connected)
+            .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
 
@@ -106,17 +148,16 @@ class VeritasVpnService : VpnService() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    override fun onDestroy() {
-        disconnect()
-        super.onDestroy()
-    }
-
     companion object {
+        const val TUNNEL_NAME = "veritas"
         const val CHANNEL_ID = "veritas_vpn"
         const val NOTIFICATION_ID = 1
         const val ACTION_CONNECT = "cloud.veritasvpn.CONNECT"
         const val ACTION_DISCONNECT = "cloud.veritasvpn.DISCONNECT"
+        const val ACTION_STATE = "cloud.veritasvpn.STATE"
         const val EXTRA_CONFIG = "config"
-        const val EXTRA_ADDRESS = "address"
+        const val EXTRA_CONNECTED = "connected"
+        const val EXTRA_ERROR = "error"
+        private const val TAG = "VeritasVpnService"
     }
 }
