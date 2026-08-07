@@ -204,6 +204,9 @@ class MainActivity : ComponentActivity() {
             appendLine()
             appendLine("[Peer]")
             appendLine("PublicKey = ${peer.serverPublicKey}")
+            if (!peer.presharedKey.isNullOrEmpty()) {
+                appendLine("PresharedKey = ${peer.presharedKey}")
+            }
             appendLine("Endpoint = ${peer.serverEndpoint}")
             appendLine("AllowedIPs = $allowed")
             appendLine("PersistentKeepalive = 25")
