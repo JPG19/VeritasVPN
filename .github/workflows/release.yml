@@ -114,8 +114,37 @@ jobs:
           name: veritasvpn-windows-msi
           path: clients/desktop/src-tauri/target/release/bundle/msi/*.msi
 
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build WireGuard Go for Android
+        run: bash build-wg-android.sh
+        working-directory: android
+
+      - name: Assemble APK
+        run: ./gradlew assembleDebug
+        working-directory: android
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: veritasvpn-android
+          path: android/app/build/outputs/apk/debug/*.apk
+
   release:
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux, build-windows, build-android]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -138,6 +167,9 @@ jobs:
           MSI=$(ls veritasvpn-windows-msi/*.msi | head -1)
           cp "$MSI" VeritasVPN-Windows.msi
 
+          APK=$(ls veritasvpn-android/*.apk | head -1)
+          cp "$APK" VeritasVPN-Android.apk
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -147,3 +179,4 @@ jobs:
             VeritasVPN-Linux.AppImage
             VeritasVPN-Windows.exe
             VeritasVPN-Windows.msi
+            VeritasVPN-Android.apk
