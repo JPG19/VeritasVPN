@@ -39,10 +39,12 @@ class AuthRepository(context: Context) {
 
     fun signIn(email: String, password: String): User {
         val normalized = email.trim().lowercase()
-        val res = ApiClient.post("/api/v1/auth/signin",
-            mapOf("email" to normalized, "password" to password))
-        if (!res.isSuccessful) throw Error(extractError(res))
-        val data = ApiClient.parse<AuthResponse>(res)!!
+        val data = ApiClient.post("/api/v1/auth/signin",
+            mapOf("email" to normalized, "password" to password)).use { res ->
+            if (!res.isSuccessful) throw Error(extractError(res))
+            ApiClient.parse<AuthResponse>(res)
+                ?: throw Error("The server returned an invalid sign-in response.")
+        }
         val user = User(email = data.email ?: normalized, accountId = data.accountId)
         persist(user, data)
         return user
@@ -50,29 +52,35 @@ class AuthRepository(context: Context) {
 
     fun signUp(email: String, password: String): User {
         val normalized = email.trim().lowercase()
-        val res = ApiClient.post("/api/v1/auth/register",
-            mapOf("email" to normalized, "password" to password))
-        if (!res.isSuccessful) throw Error(extractError(res))
-        val data = ApiClient.parse<AuthResponse>(res)!!
+        val data = ApiClient.post("/api/v1/auth/register",
+            mapOf("email" to normalized, "password" to password)).use { res ->
+            if (!res.isSuccessful) throw Error(extractError(res))
+            ApiClient.parse<AuthResponse>(res)
+                ?: throw Error("The server returned an invalid registration response.")
+        }
         val user = User(email = normalized, accountId = data.accountId)
         persist(user, data)
         return user
     }
 
     fun signInWithAccountId(accountId: String): User {
-        val res = ApiClient.post("/api/v1/auth/signin-account",
-            mapOf("account_id" to accountId.trim()))
-        if (!res.isSuccessful) throw Error(extractError(res))
-        val data = ApiClient.parse<AuthResponse>(res)!!
+        val data = ApiClient.post("/api/v1/auth/signin-account",
+            mapOf("account_id" to accountId.trim())).use { res ->
+            if (!res.isSuccessful) throw Error(extractError(res))
+            ApiClient.parse<AuthResponse>(res)
+                ?: throw Error("The server returned an invalid sign-in response.")
+        }
         val user = User(accountId = data.accountId, isAnonymous = true)
         persist(user, data)
         return user
     }
 
     fun registerAnonymous(): User {
-        val res = ApiClient.post("/api/v1/auth/register-anonymous", emptyMap())
-        if (!res.isSuccessful) throw Error(extractError(res))
-        val data = ApiClient.parse<AuthResponse>(res)!!
+        val data = ApiClient.post("/api/v1/auth/register-anonymous", emptyMap()).use { res ->
+            if (!res.isSuccessful) throw Error(extractError(res))
+            ApiClient.parse<AuthResponse>(res)
+                ?: throw Error("The server returned an invalid registration response.")
+        }
         val user = User(accountId = data.accountId, isAnonymous = true)
         persist(user, data)
         return user
@@ -83,8 +91,10 @@ class AuthRepository(context: Context) {
         val res = try {
             ApiClient.post("/api/v1/auth/refresh", mapOf("refresh_token" to rt))
         } catch (_: Exception) { return false }
-        if (!res.isSuccessful) return false
-        val data = ApiClient.parse<AuthResponse>(res) ?: return false
+        val data = res.use {
+            if (!it.isSuccessful) return false
+            ApiClient.parse<AuthResponse>(it) ?: return false
+        }
         prefs.edit().putString("access_token", data.accessToken)
             .putString("refresh_token", data.refreshToken).apply()
         return true

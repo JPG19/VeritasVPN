@@ -19,6 +19,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cloud.veritasvpn.ui.theme.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class AuthMode { SIGN_IN, SIGN_UP }
 enum class AuthMethod { EMAIL, ACCOUNT_ID }
@@ -35,10 +38,10 @@ fun AuthScreen(
     var newAccountId by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    val authRepo = remember { cloud.veritasvpn.auth.AuthRepository(
-        androidx.compose.ui.platform.LocalContext.current
-    ) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val authRepo = remember(context) { cloud.veritasvpn.auth.AuthRepository(context) }
 
     Column(
         modifier = Modifier
@@ -154,21 +157,44 @@ fun AuthScreen(
 
         Button(
             onClick = {
-                error = null; loading = true
-                try {
-                    val user = when {
-                        method == AuthMethod.EMAIL && mode == AuthMode.SIGN_IN ->
-                            authRepo.signIn(email, password)
-                        method == AuthMethod.EMAIL && mode == AuthMode.SIGN_UP ->
-                            authRepo.signUp(email, password)
-                        method == AuthMethod.ACCOUNT_ID && mode == AuthMode.SIGN_IN ->
-                            authRepo.signInWithAccountId(accountId)
-                        else -> authRepo.registerAnonymous().also { newAccountId = it.accountId }
+                error = null
+                val validationError = when {
+                    method == AuthMethod.EMAIL && email.isBlank() -> "Enter your email address."
+                    method == AuthMethod.EMAIL && password.isBlank() -> "Enter your password."
+                    method == AuthMethod.ACCOUNT_ID && mode == AuthMode.SIGN_IN && accountId.isBlank() ->
+                        "Enter your Account ID."
+                    else -> null
+                }
+                if (validationError != null) {
+                    error = validationError
+                } else {
+                    loading = true
+                    scope.launch {
+                        try {
+                            val user = withContext(Dispatchers.IO) {
+                                when {
+                                    method == AuthMethod.EMAIL && mode == AuthMode.SIGN_IN ->
+                                        authRepo.signIn(email, password)
+                                    method == AuthMethod.EMAIL && mode == AuthMode.SIGN_UP ->
+                                        authRepo.signUp(email, password)
+                                    method == AuthMethod.ACCOUNT_ID && mode == AuthMode.SIGN_IN ->
+                                        authRepo.signInWithAccountId(accountId)
+                                    else -> authRepo.registerAnonymous()
+                                }
+                            }
+                            if (method == AuthMethod.ACCOUNT_ID && mode == AuthMode.SIGN_UP) {
+                                newAccountId = user.accountId
+                            } else {
+                                onAuthenticated()
+                            }
+                        } catch (e: Exception) {
+                            error = e.message?.takeIf { it.isNotBlank() }
+                                ?: "Sign in failed. Check your connection and try again."
+                        } finally {
+                            loading = false
+                        }
                     }
-                    if (newAccountId == null) onAuthenticated()
-                } catch (e: Exception) {
-                    error = e.message
-                } finally { loading = false }
+                }
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(25.dp),

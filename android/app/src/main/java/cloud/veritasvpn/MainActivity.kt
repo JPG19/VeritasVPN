@@ -13,6 +13,9 @@ import cloud.veritasvpn.ui.AuthScreen
 import cloud.veritasvpn.ui.DashboardScreen
 import cloud.veritasvpn.ui.theme.VeritasVPNTheme
 import cloud.veritasvpn.vpn.VeritasVpnService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 import java.util.Base64
 
@@ -31,6 +34,7 @@ class MainActivity : ComponentActivity() {
                 var statusMsg by remember { mutableStateOf<String?>(null) }
                 var peerId by remember { mutableStateOf<String?>(null) }
                 val context = androidx.compose.ui.platform.LocalContext.current
+                val scope = rememberCoroutineScope()
 
                 if (user == null) {
                     AuthScreen(onAuthenticated = {
@@ -41,58 +45,67 @@ class MainActivity : ComponentActivity() {
                         connected = connected,
                         onConnect = {
                             statusMsg = "Connecting..."
-                            try {
-                                authRepo.refreshSession()
-                                val token = authRepo.getAccessToken() ?: run {
-                                    statusMsg = "Not signed in"; return@DashboardScreen
+                            scope.launch {
+                                try {
+                                    val (keys, peer) = withContext(Dispatchers.IO) {
+                                        authRepo.refreshSession()
+                                        val token = authRepo.getAccessToken()
+                                            ?: throw IllegalStateException("Not signed in")
+                                        val generatedKeys = generateWireGuardKeys()
+                                        val createdPeer = ApiClient.post(
+                                            "/api/v1/wg/peers",
+                                            mapOf("public_key" to generatedKeys.first),
+                                            token
+                                        ).use { res ->
+                                            if (!res.isSuccessful) {
+                                                val err = ApiClient.parse<PeerResponse>(res)?.error
+                                                throw IllegalStateException(err ?: "Failed to create peer")
+                                            }
+                                            ApiClient.parse<PeerResponse>(res)
+                                                ?: throw IllegalStateException("Invalid VPN server response")
+                                        }
+                                        generatedKeys to createdPeer
+                                    }
+
+                                    val config = buildWireGuardConfig(
+                                        peer, keys.second, keys.third ?: ""
+                                    )
+                                    val address = peer.assignedIp.split("/").first()
+                                    val intent = Intent(context, VeritasVpnService::class.java).apply {
+                                        action = VeritasVpnService.ACTION_CONNECT
+                                        putExtra(VeritasVpnService.EXTRA_CONFIG, config)
+                                        putExtra(VeritasVpnService.EXTRA_ADDRESS, address)
+                                    }
+                                    context.startForegroundService(intent)
+                                    connected = true
+                                    peerId = peer.peerId
+                                    statusMsg = "Connected via WireGuard"
+                                } catch (e: Exception) {
+                                    statusMsg = e.message?.takeIf { it.isNotBlank() }
+                                        ?: "Connection failed. Check your network and try again."
                                 }
-
-                                val keys = generateWireGuardKeys()
-                                val res = ApiClient.post("/api/v1/wg/peers",
-                                    mapOf("public_key" to keys.first), token)
-                                if (!res.isSuccessful) {
-                                    val err = ApiClient.parse<PeerResponse>(res)?.error
-                                    statusMsg = err ?: "Failed to create peer"
-                                    return@DashboardScreen
-                                }
-                                val peer = ApiClient.parse<PeerResponse>(res)!!
-
-                                val config = buildWireGuardConfig(
-                                    peer, keys.second, keys.third ?: ""
-                                )
-                                val address = peer.assignedIp.split("/").first()
-
-                                val intent = Intent(context, VeritasVpnService::class.java).apply {
-                                    action = VeritasVpnService.ACTION_CONNECT
-                                    putExtra(VeritasVpnService.EXTRA_CONFIG, config)
-                                    putExtra(VeritasVpnService.EXTRA_ADDRESS, address)
-                                }
-                                context.startForegroundService(intent)
-
-                                connected = true
-                                peerId = peer.peerId
-                                statusMsg = "Connected via WireGuard"
-                            } catch (e: Exception) {
-                                statusMsg = e.message ?: "Connection failed"
                             }
                         },
                         onDisconnect = {
                             statusMsg = "Disconnecting..."
-                            try {
-                                val token = authRepo.getAccessToken()
-                                peerId?.let { pid ->
-                                    if (token != null) {
-                                        ApiClient.delete("/api/v1/wg/peers/$pid", token)
-                                    }
-                                }
-                                val intent = Intent(context, VeritasVpnService::class.java).apply {
-                                    action = VeritasVpnService.ACTION_DISCONNECT
-                                }
-                                context.startService(intent)
-                            } catch (_: Exception) {}
+                            val disconnectedPeerId = peerId
+                            val intent = Intent(context, VeritasVpnService::class.java).apply {
+                                action = VeritasVpnService.ACTION_DISCONNECT
+                            }
+                            context.startService(intent)
                             connected = false
                             peerId = null
                             statusMsg = "Disconnected"
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    val token = authRepo.getAccessToken()
+                                    if (token != null && disconnectedPeerId != null) {
+                                        ApiClient.delete(
+                                            "/api/v1/wg/peers/$disconnectedPeerId", token
+                                        ).close()
+                                    }
+                                } catch (_: Exception) {}
+                            }
                         },
                         onSignOut = {
                             connected = false
@@ -133,7 +146,7 @@ class MainActivity : ComponentActivity() {
                 y = (y * 2 + bit) and 0xFF
             }
         }
-        for (i in 0 until 32) public[i] = (y xor basePoint[i]).toByte()
+        for (i in 0 until 32) public[i] = (y xor basePoint[i].toInt()).toByte()
 
         val privateB64 = Base64.getEncoder().encodeToString(secret)
         val publicB64 = Base64.getEncoder().encodeToString(public)
