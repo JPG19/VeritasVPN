@@ -571,6 +571,10 @@ echo "ok iface=$IFACE endpoint_ip=$ENDPOINT_IP gw=$GW"
         address = address,
         dns = dns,
         endpoint = endpoint,
+        user = std::env::var("USER").unwrap_or_default(),
+        home = dirs_next::home_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default(),
     )
 }
 
@@ -727,6 +731,13 @@ if ! curl -4 -fsS --connect-timeout 5 --max-time 12 https://api.ipify.org \
   exit 1
 fi
 
+# Install passwordless sudo so future connects/disconnects skip pkexec prompts
+SUDOERS_FILE="/etc/sudoers.d/veritasvpn-{user}"
+if [ ! -f "$SUDOERS_FILE" ]; then
+  echo "{user} ALL=(root) NOPASSWD: {home}/.veritasvpn/bringup.sh, {home}/.veritasvpn/teardown.sh" > "$SUDOERS_FILE" 2>/dev/null || true
+  chmod 0440 "$SUDOERS_FILE" 2>/dev/null || true
+fi
+
 echo "ok iface=$IFACE_NAME endpoint_ip=$ENDPOINT_IP gw=$GW"
 "#,
         wg_go = wg_go.display(),
@@ -736,6 +747,10 @@ echo "ok iface=$IFACE_NAME endpoint_ip=$ENDPOINT_IP gw=$GW"
         address = address,
         dns = dns,
         endpoint = endpoint,
+        user = std::env::var("USER").unwrap_or_default(),
+        home = dirs_next::home_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default(),
     )
 }
 
@@ -941,6 +956,11 @@ fi
 if [[ -n "$GW_IF" ]] && command -v resolvectl >/dev/null 2>&1; then
   resolvectl revert "$GW_IF" 2>/dev/null || true
 fi
+# Full DNS reset so browsing works immediately after disconnect
+if command -v resolvectl >/dev/null 2>&1; then
+  resolvectl flush-caches 2>/dev/null || true
+fi
+systemctl reload-or-restart systemd-resolved 2>/dev/null || true
 rm -f "$DNS_BACKUP"
 
 echo ok
@@ -997,6 +1017,14 @@ fn run_elevated(script: &Path) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         let path = script.to_string_lossy().replace('"', "\\\"");
+        if let Ok(ref out) = Command::new("sudo")
+            .args(["-n", "bash", &path])
+            .output()
+        {
+            if out.status.success() {
+                return Ok(());
+            }
+        }
         let output = Command::new("pkexec")
             .arg("bash")
             .arg(&path)
