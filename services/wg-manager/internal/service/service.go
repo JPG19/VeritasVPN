@@ -210,6 +210,18 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, pr
 		return nil, err
 	}
 
+	// A reconnect for the same account/server replaces the previous WireGuard
+	// identity. Preserve it long enough to remove it from the agent after the
+	// database upsert, otherwise wg0 accumulates stale public keys and /32s.
+	var replacedPeer *model.Peer
+	for i := range existing {
+		if existing[i].ServerID == srv.ID {
+			old := existing[i]
+			replacedPeer = &old
+			break
+		}
+	}
+
 	// Redis is an allocation accelerator, not the source of truth. Its bitmap
 	// can be lost, so always reconcile each candidate with PostgreSQL. Used
 	// candidates deliberately remain marked in Redis, rebuilding the bitmap as
@@ -259,11 +271,25 @@ func (s *Service) CreatePeer(ctx context.Context, accountID, tier, publicKey, pr
 	endpoint := fmt.Sprintf("%s:%d", srv.PublicIP, srv.WGPort)
 	serverID := srv.ID
 
-	// Notify the agent asynchronously. Peer stays "pending" until the agent
-	// applies the peer and POSTs /api/v1/agents/peers/applied.
+	// Notify the agent asynchronously. Remove the superseded key first so a
+	// reconnect is an actual replacement instead of leaking peers on wg0.
+	// Peer stays "pending" until the agent applies it and reports completion.
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		if replacedPeer != nil && replacedPeer.Pubkey != peer.Pubkey {
+			if err := s.communicator.PushPeerRemoved(bgCtx, serverID, replacedPeer); err != nil {
+				s.log.Warn("failed to remove superseded peer",
+					"peer_id", replacedPeer.ID,
+					"server_id", serverID,
+					"error", err.Error(),
+				)
+				return
+			}
+			if replacedPeer.AssignedIP != assignedIP {
+				_ = s.redis.ReleaseIP(bgCtx, serverID, replacedPeer.AssignedIP)
+			}
+		}
 		if err := s.communicator.PushPeerAdded(bgCtx, serverID, peer); err != nil {
 			s.log.Warn("agent notification failed for new peer",
 				"peer_id", peer.ID,

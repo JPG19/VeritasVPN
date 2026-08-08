@@ -133,8 +133,12 @@ func (p *Postgres) CreatePeer(ctx context.Context, peer *model.Peer) error {
 	           allowed_ips, assigned_ip, status, expires_at)
 	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	           ON CONFLICT (account_id, server_id) DO UPDATE SET
-	               pubkey = EXCLUDED.pubkey, assigned_ip = EXCLUDED.assigned_ip,
-	               status = 'pending'
+	               pubkey = EXCLUDED.pubkey,
+	               preshared_key = EXCLUDED.preshared_key,
+	               allowed_ips = EXCLUDED.allowed_ips,
+	               assigned_ip = EXCLUDED.assigned_ip,
+	               status = 'pending',
+	               expires_at = EXCLUDED.expires_at
 	           RETURNING id, created_at`
 
 	return p.pool.QueryRow(ctx, query,

@@ -116,6 +116,7 @@ function App() {
   const [tunnelMode, setTunnelMode] = useState<TunnelMode>("");
   const [peerId, setPeerId] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     if (!statusMsg) return;
@@ -169,15 +170,19 @@ function App() {
   );
 
   const handleConnect = useCallback(async () => {
+    if (connecting) return;
     setStatusMsg("");
-    await refreshSession();
-    const token = getStoredToken();
-    if (!token) {
-      setStatusMsg("Not signed in");
-      return;
-    }
+    setConnecting(true);
 
+    let token = "";
+    let createdPeerId = "";
     try {
+      await refreshSession();
+      token = getStoredToken() || "";
+      if (!token) {
+        throw new Error("Not signed in");
+      }
+
       const available = await invoke<boolean>("wireguard_available");
       if (!available) {
         throw new Error(
@@ -204,6 +209,7 @@ function App() {
         }
         throw new Error(peer.error || "Failed to create WireGuard peer");
       }
+      createdPeerId = peer.peer_id;
 
       const allowed =
         peer.client_allowed_ips ||
@@ -229,14 +235,22 @@ function App() {
         setPeerId(peer.peer_id);
         setStatusMsg("Connected via WireGuard");
       } else {
-        setStatusMsg(result.message);
+        throw new Error(result.message || "WireGuard connection failed");
       }
     } catch (err) {
-      setStatusMsg(
-        err instanceof Error ? err.message : "Connection failed"
-      );
+      // Peer creation precedes privileged local bring-up. Roll it back when
+      // bring-up fails so retries do not leave stale keys or allocated IPs.
+      if (createdPeerId && token) {
+        await fetch(`${AUTH_API}/api/v1/wg/peers/${createdPeerId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => undefined);
+      }
+      setStatusMsg(err instanceof Error ? err.message : "Connection failed");
+    } finally {
+      setConnecting(false);
     }
-  }, []);
+  }, [connecting]);
 
   const handleDisconnect = useCallback(async () => {
     setStatusMsg("Disconnecting…");
@@ -250,12 +264,8 @@ function App() {
     try {
       if (tunnelMode === "wireguard" || peerId) {
         const token = getStoredToken();
-        if (token && peerId) {
-          await fetch(`${AUTH_API}/api/v1/wg/peers/${peerId}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-          }).catch(() => undefined);
-        }
+        // Restore local routing and DNS before making any network request.
+        // Otherwise a degraded tunnel can block disconnect indefinitely.
         const result = await invoke<ConnectResult>("disconnect_wireguard");
         clearUi();
         if (!result.success) {
@@ -264,6 +274,15 @@ function App() {
               "Disconnect incomplete — approve the admin prompt, or run the teardown script from your app config directory"
           );
           return;
+        }
+        if (token && peerId) {
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 5000);
+          await fetch(`${AUTH_API}/api/v1/wg/peers/${peerId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
+          }).catch(() => undefined).finally(() => window.clearTimeout(timeout));
         }
       }
       clearUi();
@@ -443,7 +462,14 @@ function App() {
             <span className="server-live">LIVE</span>
           </div>
           {!connected ? (
-            <button className="btn-connect" onClick={handleConnect}><span>Connect now</span><i>→</i></button>
+            <button
+              className="btn-connect"
+              onClick={handleConnect}
+              disabled={connecting}
+            >
+              <span>{connecting ? "Connecting…" : "Connect now"}</span>
+              <i>→</i>
+            </button>
           ) : (
             <button className="btn-disconnect" onClick={handleDisconnect}>Disconnect</button>
           )}

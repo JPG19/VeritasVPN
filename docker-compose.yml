@@ -187,6 +187,8 @@ services:
 
 networks:
   default:
+    external: true
+    name: veritasvpn_default
   btcpay_default:
     external: true
 

@@ -64,10 +64,7 @@ fn pid_path() -> Result<PathBuf, String> {
 }
 
 fn resolve_wireguard_go(app: &AppHandle) -> Result<PathBuf, String> {
-    let candidates = [
-        "bin/wireguard-go",
-        "resources/bin/wireguard-go",
-    ];
+    let candidates = ["bin/wireguard-go", "resources/bin/wireguard-go"];
     for rel in candidates {
         if let Ok(p) = app
             .path()
@@ -284,6 +281,7 @@ IFACE_FILE='{iface_file}'
 PID_FILE='{pid_file}'
 META_FILE='{iface_file}.meta'
 DNS_BACKUP="${{META_FILE}}.dns"
+DNS_PID_FILE="${{META_FILE}}.dns-proxy.pid"
 ADDR='{address}'
 DNS='{dns}'
 ENDPOINT='{endpoint}'
@@ -306,6 +304,11 @@ route -n delete -net 0.0.0.0/1 2>/dev/null || true
 route -n delete -net 128.0.0.0/1 2>/dev/null || true
 pkill -f '/wireguard-go utun' 2>/dev/null || true
 rm -f /var/run/wireguard/*.sock 2>/dev/null || true
+if [[ -f "$DNS_PID_FILE" ]]; then
+  kill "$(cat "$DNS_PID_FILE")" 2>/dev/null || true
+  rm -f "$DNS_PID_FILE"
+fi
+ifconfig lo0 -alias 127.0.0.2 2>/dev/null || true
 
 # Capture the REAL default gateway BEFORE we install tunnel routes.
 # Without a host route to the WG endpoint via this gateway, 0.0.0.0/1
@@ -370,11 +373,23 @@ ifconfig "$IFACE" mtu 1420
 route -n delete -net 10.0.0.0/24 -interface "$IFACE" 2>/dev/null || true
 route -n add -net 10.0.0.0/24 -interface "$IFACE"
 if ! ping -c 3 -W 1000 10.0.0.1 >/tmp/veritas-wg-handshake.log 2>&1; then
+	python3 - "$IFACE" >/tmp/veritas-wg-status.log 2>/dev/null <<'PY' || true
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(f"/var/run/wireguard/{{sys.argv[1]}}.sock")
+s.sendall(b"get=1\n\n")
+s.shutdown(socket.SHUT_WR)
+data = s.recv(65536).decode("utf-8", "replace")
+s.close()
+safe = ("endpoint=", "last_handshake_time_sec=", "tx_bytes=", "rx_bytes=", "errno=")
+print(" ".join(line for line in data.splitlines() if line.startswith(safe)))
+PY
+	WG_STATUS="$(cat /tmp/veritas-wg-status.log 2>/dev/null || true)"
   route -n delete -net 10.0.0.0/24 -interface "$IFACE" 2>/dev/null || true
   ifconfig "$IFACE" down 2>/dev/null || true
   kill "$(cat "$PID_FILE")" 2>/dev/null || true
   rm -f "$PID_FILE" "$IFACE_FILE" "$META_FILE" /var/run/wireguard/*.sock
-  echo "WireGuard handshake with the Dell VPN server failed; normal internet was left unchanged" >&2
+	echo "VPN server did not respond at $ENDPOINT over UDP; normal internet was left unchanged. Check UDP 51820 forwarding/filtering. $WG_STATUS" >&2
   exit 1
 fi
 
@@ -382,16 +397,6 @@ fi
 if [[ -n "$ENDPOINT_IP" && -n "$GW" ]]; then
   route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
   route -n add -host "$ENDPOINT_IP" "$GW"
-fi
-
-# macOS attaches DNS configured with networksetup to the physical service.
-# Pin the DHCP-provided public resolvers through the physical gateway before
-# adding the split default. Web traffic still uses WireGuard.
-if [[ -n "$GW" ]]; then
-  route -n delete -host 1.1.1.1 2>/dev/null || true
-  route -n delete -host 8.8.8.8 2>/dev/null || true
-  route -n add -host 1.1.1.1 "$GW"
-  route -n add -host 8.8.8.8 "$GW"
 fi
 
 # Split default (like wg-quick) so we don't replace the system default route entry.
@@ -402,13 +407,13 @@ route -n add -net 128.0.0.0/1 -interface "$IFACE"
 
 # Active network service for DNS (not "first listed").
 SERVICE="$(networksetup -listnetworkserviceorder 2>/dev/null | awk -v iface="$GW_IF" '
-  /^\(Hardware Port:/ {{
+  /^\([0-9]+\) / {{
     name=$0
-    sub(/^\(Hardware Port: /, "", name)
-    sub(/,.*/, "", name)
+    sub(/^\([0-9]+\) /, "", name)
   }}
   /Device: / {{
-    dev=$2
+    dev=$0
+    sub(/^.*Device: /, "", dev)
     sub(/\).*/, "", dev)
     if (iface != "" && dev == iface) {{ print name; exit }}
   }}
@@ -418,8 +423,89 @@ if [[ -z "$SERVICE" ]]; then
 fi
 if [[ -z "$SERVICE" ]]; then SERVICE="Wi-Fi"; fi
 networksetup -getdnsservers "$SERVICE" > "$DNS_BACKUP" 2>/dev/null || true
-# These are also the resolvers advertised by DHCP on the current test network.
-if [[ -z "$GW" ]] || ! networksetup -setdnsservers "$SERVICE" 1.1.1.1 8.8.8.8; then
+# Never preserve a resolver owned by a previous interrupted Veritas session.
+if grep -Eq '^(10\.0\.0\.1|127\.0\.0\.[12])$' "$DNS_BACKUP" 2>/dev/null; then
+  printf '%s\n' 'There are not any DNS Servers set on this service.' > "$DNS_BACKUP"
+fi
+# macOS scopes DNS configured on a physical service to that interface. A DNS
+# server reached through a userspace utun would therefore be bypassed. Bind a
+# loopback forwarder and let its upstream socket follow the VPN routing table.
+ifconfig lo0 alias 127.0.0.2 255.255.255.255
+python3 - "$DNS" >/tmp/veritas-dns-proxy.log 2>&1 <<'PY' &
+import signal, socket, socketserver, struct, sys, threading
+
+upstream = (sys.argv[1], 53)
+
+def exchange(payload):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(5)
+    try:
+        sock.sendto(payload, upstream)
+        return sock.recvfrom(65535)[0]
+    finally:
+        sock.close()
+
+class UDP(socketserver.ThreadingUDPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+class UDPHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        data, client = self.request
+        try:
+            client.sendto(exchange(data), self.client_address)
+        except OSError:
+            pass
+
+class TCP(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+class TCPHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        header = self.request.recv(2)
+        if len(header) != 2:
+            return
+        remaining = struct.unpack("!H", header)[0]
+        chunks = []
+        while remaining:
+            chunk = self.request.recv(remaining)
+            if not chunk:
+                return
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        try:
+            answer = exchange(b"".join(chunks))
+            self.request.sendall(struct.pack("!H", len(answer)) + answer)
+        except OSError:
+            pass
+
+udp = UDP(("127.0.0.2", 53), UDPHandler)
+tcp = TCP(("127.0.0.2", 53), TCPHandler)
+threading.Thread(target=udp.serve_forever, daemon=True).start()
+threading.Thread(target=tcp.serve_forever, daemon=True).start()
+signal.pause()
+PY
+echo $! > "$DNS_PID_FILE"
+for _ in $(seq 1 30); do
+  dig +time=1 +tries=1 @127.0.0.2 api.ipify.org A +short 2>/dev/null | \
+    grep -Eq '^[0-9]+(\.[0-9]+){{3}}$' && break
+  sleep 0.1
+done
+if ! kill -0 "$(cat "$DNS_PID_FILE")" 2>/dev/null || \
+   ! networksetup -setdnsservers "$SERVICE" 127.0.0.2; then
+  networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
+  route -n delete -net 0.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
+  route -n delete -net 128.0.0.0/1 -interface "$IFACE" 2>/dev/null || true
+  route -n delete -net 10.0.0.0/24 -interface "$IFACE" 2>/dev/null || true
+  [[ -n "$ENDPOINT_IP" ]] && route -n delete -host "$ENDPOINT_IP" 2>/dev/null || true
+  ifconfig "$IFACE" down 2>/dev/null || true
+  kill "$(cat "$DNS_PID_FILE")" 2>/dev/null || true
+  kill "$(cat "$PID_FILE")" 2>/dev/null || true
+  ifconfig lo0 -alias 127.0.0.2 2>/dev/null || true
+  rm -f "$DNS_PID_FILE" "$PID_FILE" "$IFACE_FILE" "$META_FILE" "$DNS_BACKUP" /var/run/wireguard/*.sock
+  dscacheutil -flushcache 2>/dev/null || true
+  killall -HUP mDNSResponder 2>/dev/null || true
   echo "Could not configure VPN DNS on $SERVICE" >&2
   exit 1
 fi
@@ -433,14 +519,12 @@ printf 'endpoint_ip=%s\ngateway=%s\nservice=%s\niface=%s\n' \
 # Do not report Connected unless DNS and HTTPS both work. Keeping the checks
 # separate makes failures actionable and prevents a false Connected UI.
 DNS_OK=0
-if command -v dig >/dev/null 2>&1; then
-  dig +time=3 +tries=2 @1.1.1.1 api.ipify.org A +short \
-    >/tmp/veritas-wg-dns.log 2>/tmp/veritas-wg-dns-error.log && \
-    grep -Eq '^[0-9]+(\.[0-9]+){{3}}$' /tmp/veritas-wg-dns.log && DNS_OK=1
-else
+for _ in $(seq 1 20); do
   dscacheutil -q host -a name api.ipify.org \
-    >/tmp/veritas-wg-dns.log 2>/tmp/veritas-wg-dns-error.log && DNS_OK=1
-fi
+    >/tmp/veritas-wg-dns.log 2>/tmp/veritas-wg-dns-error.log && \
+    grep -q 'ip_address:' /tmp/veritas-wg-dns.log && DNS_OK=1 && break
+  sleep 0.25
+done
 HTTPS_OK=0
 if [[ "$DNS_OK" -eq 1 ]] && \
    /usr/bin/curl -4 -fsS --connect-timeout 5 --max-time 12 https://api.ipify.org \
@@ -456,7 +540,7 @@ if [[ "$DNS_OK" -ne 1 || "$HTTPS_OK" -ne 1 ]]; then
   route -n delete -host 8.8.8.8 2>/dev/null || true
   DNS_VALUES=()
   while IFS= read -r VALUE; do
-    [[ "$VALUE" =~ ^[0-9a-fA-F:.]+$ ]] && DNS_VALUES+=("$VALUE")
+    [[ "$VALUE" =~ ^[0-9a-fA-F:.]+$ && "$VALUE" != "10.0.0.1" && "$VALUE" != "127.0.0.1" && "$VALUE" != "127.0.0.2" ]] && DNS_VALUES+=("$VALUE")
   done < "$DNS_BACKUP"
   if [[ ${{#DNS_VALUES[@]}} -gt 0 ]]; then
     networksetup -setdnsservers "$SERVICE" "${{DNS_VALUES[@]}}" 2>/dev/null || true
@@ -464,8 +548,10 @@ if [[ "$DNS_OK" -ne 1 || "$HTTPS_OK" -ne 1 ]]; then
     networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
   fi
   ifconfig "$IFACE" down 2>/dev/null || true
-  kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
-  rm -f "$PID_FILE" "$IFACE_FILE" "$META_FILE" "$DNS_BACKUP" /var/run/wireguard/*.sock
+  kill "$(cat "$DNS_PID_FILE")" 2>/dev/null || true
+  kill "$(cat "$PID_FILE")" 2>/dev/null || true
+  ifconfig lo0 -alias 127.0.0.2 2>/dev/null || true
+  rm -f "$DNS_PID_FILE" "$PID_FILE" "$IFACE_FILE" "$META_FILE" "$DNS_BACKUP" /var/run/wireguard/*.sock
   dscacheutil -flushcache 2>/dev/null || true
   killall -HUP mDNSResponder 2>/dev/null || true
   if [[ "$DNS_OK" -ne 1 ]]; then
@@ -677,6 +763,7 @@ IFACE_FILE='{iface_file}'
 PID_FILE='{pid_file}'
 META_FILE='{meta_file}'
 DNS_BACKUP="${{META_FILE}}.dns"
+DNS_PID_FILE="${{META_FILE}}.dns-proxy.pid"
 
 ENDPOINT_IP=""
 GW=""
@@ -694,6 +781,27 @@ fi
 if [[ -z "$IFACE" && -f "$IFACE_FILE" ]]; then
   IFACE="$(cat "$IFACE_FILE")"
 fi
+
+# Restore physical-service DNS before stopping the local forwarder or tunnel.
+# This keeps disconnect fail-open and avoids an offline transition window.
+if [[ -z "$SERVICE" ]]; then
+  SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
+fi
+if [[ -n "$SERVICE" ]]; then
+  DNS_VALUES=()
+  if [[ -f "$DNS_BACKUP" ]]; then
+    while IFS= read -r VALUE; do
+      [[ "$VALUE" =~ ^[0-9a-fA-F:.]+$ && "$VALUE" != "10.0.0.1" && "$VALUE" != "127.0.0.1" && "$VALUE" != "127.0.0.2" ]] && DNS_VALUES+=("$VALUE")
+    done < "$DNS_BACKUP"
+  fi
+  if [[ ${{#DNS_VALUES[@]}} -gt 0 ]]; then
+    networksetup -setdnsservers "$SERVICE" "${{DNS_VALUES[@]}}" 2>/dev/null || true
+  else
+    networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
+  fi
+fi
+dscacheutil -flushcache 2>/dev/null || true
+killall -HUP mDNSResponder 2>/dev/null || true
 
 # Remove full-tunnel split routes (by iface and globally).
 if [[ -n "$IFACE" ]]; then
@@ -714,35 +822,28 @@ fi
 route -n delete -host 1.1.1.1 2>/dev/null || true
 route -n delete -host 8.8.8.8 2>/dev/null || true
 
-# Stop userspace WireGuard.
-if [[ -f "$PID_FILE" ]]; then
-  kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
-  rm -f "$PID_FILE"
-fi
-pkill -f '/wireguard-go utun' 2>/dev/null || true
+# Stop only the processes recorded for this connection. Give each a bounded
+# graceful shutdown, then force it only if it is still alive.
+stop_pid_file() {{
+  local file="$1" pid=""
+  [[ -f "$file" ]] || return 0
+  pid="$(cat "$file" 2>/dev/null || true)"
+  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$file"
+}}
+stop_pid_file "$DNS_PID_FILE"
+stop_pid_file "$PID_FILE"
+ifconfig lo0 -alias 127.0.0.2 2>/dev/null || true
 rm -f /var/run/wireguard/*.sock 2>/dev/null || true
 rm -f "$IFACE_FILE" "$META_FILE"
-
-# Restore DNS on the service we changed, else try common names.
-if [[ -z "$SERVICE" ]]; then
-  SERVICE="$(networksetup -listallnetworkservices 2>/dev/null | awk 'NR==2{{print; exit}}')"
-fi
-if [[ -n "$SERVICE" ]]; then
-  DNS_VALUES=()
-  if [[ -f "$DNS_BACKUP" ]]; then
-    while IFS= read -r VALUE; do
-      [[ "$VALUE" =~ ^[0-9a-fA-F:.]+$ ]] && DNS_VALUES+=("$VALUE")
-    done < "$DNS_BACKUP"
-  fi
-  if [[ ${{#DNS_VALUES[@]}} -gt 0 ]]; then
-    networksetup -setdnsservers "$SERVICE" "${{DNS_VALUES[@]}}" 2>/dev/null || true
-  else
-    networksetup -setdnsservers "$SERVICE" Empty 2>/dev/null || true
-  fi
-fi
 rm -f "$DNS_BACKUP"
-dscacheutil -flushcache 2>/dev/null || true
-killall -HUP mDNSResponder 2>/dev/null || true
 
 echo ok
 "#,
@@ -768,7 +869,8 @@ echo ok
         let _ = fs::remove_file(peer_id_path()?);
         let _ = elev_err;
         return Err(
-            "disconnect needs admin rights — run manually: sudo bash ~/.veritasvpn/teardown.sh".into()
+            "disconnect needs admin rights — run manually: sudo bash ~/.veritasvpn/teardown.sh"
+                .into(),
         );
     }
     let _ = fs::remove_file(conf_path()?);
@@ -863,7 +965,8 @@ echo ok
         let _ = fs::remove_file(peer_id_path()?);
         let _ = elev_err;
         return Err(
-            "disconnect needs admin rights — run manually: sudo bash ~/.veritasvpn/teardown.sh".into()
+            "disconnect needs admin rights — run manually: sudo bash ~/.veritasvpn/teardown.sh"
+                .into(),
         );
     }
     let _ = fs::remove_file(conf_path()?);
@@ -957,7 +1060,10 @@ fn set_proxy_macos(host: &str, port: u16) -> Result<String, String> {
         .args(["-setsocksfirewallproxystate", &service, "on"])
         .output()
         .map_err(|e| format!("Failed to enable SOCKS proxy: {}", e))?;
-    Ok(format!("SOCKS5 proxy set on {} -> {}:{}", service, host, port))
+    Ok(format!(
+        "SOCKS5 proxy set on {} -> {}:{}",
+        service, host, port
+    ))
 }
 
 #[cfg(target_os = "macos")]

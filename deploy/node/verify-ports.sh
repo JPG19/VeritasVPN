@@ -2,7 +2,12 @@
 # Verify WireGuard UDP 51820 is reachable from the internet.
 set -euo pipefail
 
-PUBLIC_IP="${1:-}"
+MODE="${1:-}"
+if [[ "$MODE" == "--observe" ]]; then
+  PUBLIC_IP="${2:-}"
+else
+  PUBLIC_IP="$MODE"
+fi
 if [[ -z "$PUBLIC_IP" ]]; then
   PUBLIC_IP="${PUBLIC_IP:-$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || echo '')}"
 fi
@@ -15,6 +20,22 @@ fi
 
 WG_PORT="${WG_PORT:-51820}"
 _TIMEOUT=3
+
+if [[ "$MODE" == "--observe" ]]; then
+  EGRESS_IFACE="${EGRESS_IFACE:-$(ip route show default | awk '{print $5; exit}')}"
+  if [[ -z "$EGRESS_IFACE" ]]; then
+    echo "Could not detect the external interface; set EGRESS_IFACE." >&2
+    exit 1
+  fi
+  echo "Observing $EGRESS_IFACE for an external UDP $WG_PORT probe for 20 seconds."
+  echo "From a different network, send: printf probe | nc -u -w 2 ${PUBLIC_IP} ${WG_PORT}"
+  if timeout 20 tcpdump -ni "$EGRESS_IFACE" "udp dst port $WG_PORT" -c 1; then
+    echo "[ OK ] An external UDP $WG_PORT packet reached this host."
+    exit 0
+  fi
+  echo "[FAIL] No external UDP $WG_PORT packet reached this host. Check router forwarding, WAN firewall, or CGNAT." >&2
+  exit 1
+fi
 
 echo "=== VeritasVPN Port Verification ==="
 echo "  Public IP:  $PUBLIC_IP"
@@ -50,7 +71,7 @@ fi
 echo ""
 
 # Check external reachability via public check services
-echo "[3/3] External reachability check..."
+echo "[3/3] External reachability guidance..."
 echo "  (This tests if your router forwards UDP $WG_PORT to this host)"
 echo ""
 
@@ -88,5 +109,6 @@ echo "    1. Check router forwards UDP $WG_PORT to $PUBLIC_IP"
 echo "    2. Test from an external host: nc -uvz $PUBLIC_IP $WG_PORT"
 echo "    3. Use https://portchecker.co with IP $PUBLIC_IP port $WG_PORT"
 echo ""
-echo "  If you're behind CGNAT, move the node to a VPS with a public IP."
+echo "  Definitive test: sudo $0 --observe $PUBLIC_IP"
+echo "  If you're behind CGNAT, request a public IPv4 or move the node to a VPS."
 exit 1
