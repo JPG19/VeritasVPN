@@ -15,11 +15,13 @@ import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
 import cloud.veritasvpn.MainActivity
 import cloud.veritasvpn.R
+import cloud.veritasvpn.api.ApiClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.io.ByteArrayInputStream
 
 class VeritasVpnService : GoBackend.VpnService(), Tunnel {
@@ -45,9 +47,17 @@ class VeritasVpnService : GoBackend.VpnService(), Tunnel {
                     try {
                         val parsed = Config.parse(ByteArrayInputStream(config.toByteArray(Charsets.UTF_8)))
                         val state = backend.setState(this@VeritasVpnService, Tunnel.State.UP, parsed)
-                        broadcastState(state == Tunnel.State.UP, null)
+                        if (state != Tunnel.State.UP) {
+                            throw IllegalStateException("WireGuard backend did not enter the UP state")
+                        }
+                        val egressIp = verifyTunnelEgress()
+                        broadcastState(true, null, egressIp)
                     } catch (e: Exception) {
                         Log.e(TAG, "Connect failed", e)
+                        try {
+                            backend.setState(this@VeritasVpnService, Tunnel.State.DOWN, null)
+                        } catch (_: Exception) {
+                        }
                         broadcastState(false, friendlyError(e))
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelf()
@@ -85,10 +95,9 @@ class VeritasVpnService : GoBackend.VpnService(), Tunnel {
                 ServiceCompat.startForeground(
                     this,
                     NOTIFICATION_ID,
-                    buildNotification("Connected"),
+                    buildNotification("Verifying encrypted tunnel…"),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                 )
-                broadcastState(true, null)
             }
             else -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -116,10 +125,36 @@ class VeritasVpnService : GoBackend.VpnService(), Tunnel {
         return e.message?.takeIf { it.isNotBlank() } ?: "Connection failed. Check your network and try again."
     }
 
-    private fun broadcastState(connected: Boolean, error: String?) {
+    private suspend fun verifyTunnelEgress(): String {
+        var lastError: Throwable? = null
+        repeat(20) {
+            try {
+                val stats = backend.getStatistics(this@VeritasVpnService)
+                if (stats.totalTx() > 0 && stats.totalRx() > 0) {
+                    val egressIp = ApiClient.getText("https://api.ipify.org")
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        buildNotification("Connected · $egressIp"),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    )
+                    return egressIp
+                }
+            } catch (error: Throwable) {
+                lastError = error
+            }
+            delay(500)
+        }
+        throw IllegalStateException(
+            lastError?.message ?: "WireGuard handshake timed out; no encrypted traffic was received"
+        )
+    }
+
+    private fun broadcastState(connected: Boolean, error: String?, egressIp: String? = null) {
         val intent = Intent(ACTION_STATE).setPackage(packageName)
             .putExtra(EXTRA_CONNECTED, connected)
         if (error != null) intent.putExtra(EXTRA_ERROR, error)
+        if (egressIp != null) intent.putExtra(EXTRA_EGRESS_IP, egressIp)
         sendBroadcast(intent)
     }
 
@@ -158,6 +193,7 @@ class VeritasVpnService : GoBackend.VpnService(), Tunnel {
         const val EXTRA_CONFIG = "config"
         const val EXTRA_CONNECTED = "connected"
         const val EXTRA_ERROR = "error"
+        const val EXTRA_EGRESS_IP = "egress_ip"
         private const val TAG = "VeritasVpnService"
     }
 }

@@ -39,6 +39,17 @@ object ApiClient {
         return client.newCall(builder.build()).execute()
     }
 
+    fun getText(url: String): String {
+        val request = Request.Builder().url(url).get().build()
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("HTTP ${response.code} during VPN egress validation")
+            }
+            response.body?.string()?.trim()?.takeIf { it.isNotEmpty() }
+                ?: throw IOException("Empty VPN egress validation response")
+        }
+    }
+
     inline fun <reified T> parse(response: Response): T? {
         val body = response.body?.string() ?: return null
         return try { gson.fromJson(body, T::class.java) } catch (_: Exception) { null }

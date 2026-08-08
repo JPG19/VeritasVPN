@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
             VeritasVPNTheme {
                 var user by remember { mutableStateOf(authRepo.getStoredUser()) }
                 var connected by remember { mutableStateOf(false) }
+                var connecting by remember { mutableStateOf(false) }
                 var statusMsg by remember { mutableStateOf<String?>(null) }
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
@@ -52,8 +53,13 @@ class MainActivity : ComponentActivity() {
                 ) { result ->
                     if (result.resultCode == Activity.RESULT_OK) {
                         statusMsg = null
-                        startConnection(context, scope) { msg -> statusMsg = msg }
+                        startConnection(
+                            context, scope,
+                            setStatus = { msg -> statusMsg = msg },
+                            setConnecting = { connecting = it }
+                        )
                     } else {
+                        connecting = false
                         statusMsg = "VPN permission not granted."
                     }
                 }
@@ -67,11 +73,30 @@ class MainActivity : ComponentActivity() {
                         override fun onReceive(context: Context?, intent: Intent?) {
                             if (intent?.action != VeritasVpnService.ACTION_STATE) return
                             connected = intent.getBooleanExtra(VeritasVpnService.EXTRA_CONNECTED, false)
+                            connecting = false
                             statusMsg = if (connected) {
-                                "Connected via WireGuard"
+                                val egressIp = intent.getStringExtra(
+                                    VeritasVpnService.EXTRA_EGRESS_IP
+                                )
+                                if (egressIp.isNullOrBlank()) "Connected via WireGuard"
+                                else "Connected · VPN egress $egressIp"
                             } else {
-                                intent.getStringExtra(VeritasVpnService.EXTRA_ERROR)
-                                    ?: "Disconnected"
+                                val error = intent.getStringExtra(VeritasVpnService.EXTRA_ERROR)
+                                if (error != null) {
+                                    val failedPeerId = peerIdForDisconnect()
+                                    if (failedPeerId != null) {
+                                        scope.launch(Dispatchers.IO) {
+                                            runCatching {
+                                                val token = authRepo.getAccessToken()
+                                                    ?: return@runCatching
+                                                ApiClient.delete(
+                                                    "/api/v1/wg/peers/$failedPeerId", token
+                                                ).close()
+                                            }
+                                        }
+                                    }
+                                }
+                                error ?: "Disconnected"
                             }
                         }
                     }
@@ -85,6 +110,8 @@ class MainActivity : ComponentActivity() {
                 }
 
                 fun requestConnect() {
+                    if (connecting || connected) return
+                    connecting = true
                     VpnService.prepare(context)?.let { consentIntent ->
                         vpnPermissionLauncher.launch(consentIntent)
                         return
@@ -95,7 +122,11 @@ class MainActivity : ComponentActivity() {
                             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                     }
-                    startConnection(context, scope) { msg -> statusMsg = msg }
+                    startConnection(
+                        context, scope,
+                        setStatus = { msg -> statusMsg = msg },
+                        setConnecting = { connecting = it }
+                    )
                 }
 
                 if (user == null) {
@@ -105,6 +136,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     DashboardScreen(
                         connected = connected,
+                        connecting = connecting,
                         onConnect = { requestConnect() },
                         onDisconnect = {
                             statusMsg = "Disconnecting..."
@@ -152,8 +184,10 @@ class MainActivity : ComponentActivity() {
     private fun startConnection(
         context: Context,
         scope: CoroutineScope,
-        setStatus: (String) -> Unit
+        setStatus: (String) -> Unit,
+        setConnecting: (Boolean) -> Unit
     ) {
+        if (currentPeerId != null) return
         setStatus("Connecting...")
         scope.launch {
             try {
@@ -182,9 +216,10 @@ class MainActivity : ComponentActivity() {
                     action = VeritasVpnService.ACTION_CONNECT
                     putExtra(VeritasVpnService.EXTRA_CONFIG, config)
                 }
-                context.startForegroundService(intent)
                 currentPeerId = peer.peerId
+                context.startForegroundService(intent)
             } catch (e: Exception) {
+                setConnecting(false)
                 setStatus(e.message?.takeIf { it.isNotBlank() }
                     ?: "Connection failed. Check your network and try again.")
             }

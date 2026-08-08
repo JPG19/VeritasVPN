@@ -21,6 +21,7 @@ import cloud.veritasvpn.ui.theme.*
 @Composable
 fun DashboardScreen(
     connected: Boolean,
+    connecting: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onSignOut: () -> Unit,
@@ -164,6 +165,7 @@ fun DashboardScreen(
             // Connect / Disconnect button
             Button(
                 onClick = if (connected) onDisconnect else onConnect,
+                enabled = !connecting,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(26.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -171,7 +173,11 @@ fun DashboardScreen(
                 )
             ) {
                 Text(
-                    text = if (connected) "Disconnect" else "Connect now",
+                    text = when {
+                        connecting -> "Connecting..."
+                        connected -> "Disconnect"
+                        else -> "Connect now"
+                    },
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp
