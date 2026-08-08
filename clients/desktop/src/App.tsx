@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { fetch } from "@tauri-apps/plugin-http";
 import {
   getStoredUser,
   getStoredToken,
